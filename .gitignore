@@ -1,0 +1,10 @@
+node_modules
+dist
+.dev.vars
+.wrangler
+.vite
+*.local
+.DS_Store
+worker-configuration.d.ts
+cookies.txt
+tmp-*.json

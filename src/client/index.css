@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Segoe UI", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --color-background: #0a0a0a;
+  --color-foreground: #fafafa;
+  --color-card: #141414;
+  --color-card-foreground: #fafafa;
+  --color-muted: #1f1f1f;
+  --color-muted-foreground: #a1a1aa;
+  --color-border: #262626;
+  --color-input: #262626;
+  --color-primary: #f97316;
+  --color-primary-foreground: #0a0a0a;
+  --color-secondary: #1f1f1f;
+  --color-secondary-foreground: #fafafa;
+  --color-accent: #1c1917;
+  --color-accent-foreground: #fdba74;
+  --color-destructive: #ef4444;
+  --color-ring: #f97316;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+.pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+
+.mb-safe {
+  margin-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+
+.pt-safe {
+  padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+}
+
+/* Scrollbar dünner auf mobil */
+@media (hover: none) and (pointer: coarse) {
+  * {
+    scrollbar-width: thin;
+  }
+}
+
+/* Bessere Touch-Ziele */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
