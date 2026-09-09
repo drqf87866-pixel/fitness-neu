@@ -17,6 +17,20 @@ export const MUSCLE_LABELS: Record<string, string> = {
   other: "Sonstiges",
 };
 
+/**
+ * Grobe Körperbereiche für die Startseiten-Kacheln. Die 14 feinkörnigen
+ * `primaryMuscle`-Keys sind dafür zu viele – `cardio` und `other` bleiben
+ * bewusst außen vor, da ihr kg-Volumen nicht vergleichbar ist.
+ */
+export const MUSCLE_GROUPS = [
+  { key: "chest", label: "Brust", muscles: ["chest"] },
+  { key: "back", label: "Rücken", muscles: ["lats", "upper_back", "lower_back", "traps"] },
+  { key: "shoulders", label: "Schultern", muscles: ["shoulders"] },
+  { key: "arms", label: "Arme", muscles: ["biceps", "triceps", "forearms"] },
+  { key: "legs", label: "Beine", muscles: ["quads", "hamstrings", "glutes", "calves"] },
+  { key: "core", label: "Rumpf", muscles: ["core"] },
+] as const;
+
 export const CATEGORY_LABELS: Record<string, string> = {
   push: "Push",
   pull: "Pull",

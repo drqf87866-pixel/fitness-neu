@@ -111,3 +111,13 @@ export type VolumePoint = {
   primaryMuscle: string;
   volume: number;
 };
+
+export type MuscleVolume = {
+  primaryMuscle: string;
+  /** Volumen der abgeschlossenen Sätze der letzten 7 Tage in kg. */
+  volume: number;
+  /** Anzahl abgeschlossener Sätze der letzten 7 Tage. */
+  setCount: number;
+  /** Letzter abgeschlossene Satz dieser Muskelgruppe (max. 365 Tage zurück). */
+  lastTrainedAt: number | null;
+};

@@ -33,3 +33,11 @@ export function formatStopwatch(ms: number) {
   const ss = String(seconds).padStart(2, "0");
   return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
 }
+
+/** Relative Tagesangabe für Verlaufs-Hinweise: "heute", "gestern", "vor 5 Tagen". */
+export function daysAgo(timestamp: number) {
+  const days = Math.floor((Date.now() - timestamp) / 86_400_000);
+  if (days <= 0) return "heute";
+  if (days === 1) return "gestern";
+  return `vor ${days} Tagen`;
+}

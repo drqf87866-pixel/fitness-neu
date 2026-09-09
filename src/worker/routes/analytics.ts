@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { and, eq, gte, isNotNull, lte } from "drizzle-orm";
 import { exercises, setLogs, workoutLogs } from "../../db/schema";
-import type { PersonalRecord, VolumePoint } from "../../shared/types";
+import type { MuscleVolume, PersonalRecord, VolumePoint } from "../../shared/types";
 import type { AppEnv } from "../env";
 import { dbFrom, estimated1rm, toProfile } from "../lib/helpers";
 import { users } from "../../db/schema";
@@ -130,5 +130,62 @@ analyticsRoutes.get("/dashboard", async (c) => {
     profile: toProfile(user),
     weekVolume: Math.round(weekVolume),
     sessionCountThisWeek,
+  });
+});
+
+/**
+ * Rollierendes 7-Tage-Volumen je Muskelgruppe für die Startseite.
+ *
+ * `/volume` bucketet nach ISO-Woche und kann ein tagesgenaues 7-Tage-Fenster
+ * nicht abbilden. `lastTrainedAt` kommt aus einem 365-Tage-Fenster, damit auch
+ * vernachlässigte Muskelgruppen sagen können, wie lange sie schon ruhen.
+ */
+analyticsRoutes.get("/muscles", async (c) => {
+  const db = dbFrom(c);
+  const userId = c.get("userId");
+  const now = Date.now();
+  const windowStart = now - 7 * 24 * 60 * 60 * 1000;
+  const historyStart = now - 365 * 24 * 60 * 60 * 1000;
+
+  const rows = await db
+    .select({
+      primaryMuscle: exercises.primaryMuscle,
+      weight: setLogs.weight,
+      reps: setLogs.reps,
+      startedAt: workoutLogs.startedAt,
+    })
+    .from(setLogs)
+    .innerJoin(workoutLogs, eq(setLogs.workoutLogId, workoutLogs.id))
+    .innerJoin(exercises, eq(setLogs.exerciseId, exercises.id))
+    .where(
+      and(
+        eq(workoutLogs.userId, userId),
+        eq(setLogs.isCompleted, true),
+        isNotNull(workoutLogs.completedAt),
+        gte(workoutLogs.startedAt, historyStart),
+      ),
+    );
+
+  const muscles = new Map<string, MuscleVolume>();
+  for (const row of rows) {
+    let entry = muscles.get(row.primaryMuscle);
+    if (!entry) {
+      entry = { primaryMuscle: row.primaryMuscle, volume: 0, setCount: 0, lastTrainedAt: null };
+      muscles.set(row.primaryMuscle, entry);
+    }
+    if (entry.lastTrainedAt === null || row.startedAt > entry.lastTrainedAt) {
+      entry.lastTrainedAt = row.startedAt;
+    }
+    if (row.startedAt >= windowStart) {
+      entry.volume += row.weight * row.reps;
+      entry.setCount += 1;
+    }
+  }
+
+  return c.json({
+    muscles: [...muscles.values()].map((entry) => ({
+      ...entry,
+      volume: Math.round(entry.volume),
+    })),
   });
 });
