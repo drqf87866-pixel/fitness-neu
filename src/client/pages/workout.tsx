@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, Flag, Minus, Plus, X } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Check, ChevronDown, Flag, Minus, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { ExercisePicker } from "@/components/exercise-picker";
 import { RestTimer } from "@/components/rest-timer";
 import { SetRow } from "@/components/set-row";
+import { AiProgress } from "@/components/ui/ai-progress";
+import { Badge } from "@/components/ui/badge";
+import { Sheet } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,10 +16,12 @@ import { useConfirm } from "@/components/ui/confirm";
 import { MAX_SETS_PER_EXERCISE, useActiveWorkout } from "@/hooks/use-active-workout";
 import { useWakeLock } from "@/hooks/use-wake-lock";
 import { useAuthQuery } from "@/lib/auth";
+import { api } from "@/lib/api";
 import { muscleLabel } from "@/lib/labels";
 import { getExerciseThumbnail } from "@/lib/exercise-images";
 import { kgToDisplay, unitLabel } from "@/lib/units";
 import { cn, formatDuration, formatStopwatch } from "@/lib/utils";
+import type { Exercise } from "@shared/types";
 
 export function WorkoutPage() {
   const { id } = useParams();
@@ -29,10 +34,13 @@ export function WorkoutPage() {
 
   const [notes, setNotes] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
-  /** Manuell aufgeklappte Übung; `null` folgt automatisch dem Trainingsfortschritt. */
+  /** Manuell aufgeklappte Übung; `null` folgt automatisch dem Fortschritt,
+   *  `ALL_COLLAPSED` signalisiert "Nutzer hat explizit alle zugeklappt". */
   const [manualOpen, setManualOpen] = useState<string | null>(null);
+  const ALL_COLLAPSED = "__none__";
   const [now, setNow] = useState(() => Date.now());
   const [finishing, setFinishing] = useState(false);
+  const [altTarget, setAltTarget] = useState<{ exerciseId: string; name: string } | null>(null);
 
   const session = workout.session;
   const { grouped, currentIndex, totals } = workout;
@@ -62,6 +70,7 @@ export function WorkoutPage() {
   }, []);
 
   const activeId = useMemo(() => {
+    if (manualOpen === ALL_COLLAPSED) return null;
     if (manualOpen && grouped.some((group) => group.exerciseId === manualOpen)) return manualOpen;
     if (currentIndex >= 0) return grouped[currentIndex]?.exerciseId ?? null;
     return null;
@@ -97,9 +106,12 @@ export function WorkoutPage() {
 
   const progress = totals.totalSets > 0 ? (totals.completedSets / totals.totalSets) * 100 : 0;
   const allDone = currentIndex === -1 && totals.totalSets > 0;
+  const completedExercises = grouped.filter(
+    (g) => g.sets.length > 0 && g.sets.every((s) => s.isCompleted),
+  ).length;
   const positionLabel = allDone
     ? "Alle Übungen erledigt"
-    : `Übung ${Math.max(1, currentIndex + 1)} von ${grouped.length}`;
+    : `${completedExercises} von ${grouped.length} Übungen abgeschlossen`;
 
   async function finish() {
     const open = totals.totalSets - totals.completedSets;
@@ -139,6 +151,33 @@ export function WorkoutPage() {
     } finally {
       setFinishing(false);
     }
+  }
+
+  const alternatives = useMutation({
+    mutationFn: (exerciseId: string) =>
+      api<{ alternatives: Exercise[]; usedFallback: boolean }>("/api/ai/alternatives", {
+        method: "POST",
+        body: JSON.stringify({ exerciseId }),
+      }),
+    onError: (error) => toast.error(error.message),
+  });
+
+  function openAlternatives(group: (typeof grouped)[number]) {
+    setAltTarget({ exerciseId: group.exerciseId, name: group.name });
+    alternatives.reset();
+    alternatives.mutate(group.exerciseId);
+  }
+
+  function applyAlternative(exercise: Exercise) {
+    if (!altTarget) return;
+    workout.replaceExercise(altTarget.exerciseId, {
+      exerciseId: exercise.id,
+      name: exercise.name,
+      primaryMuscle: exercise.primaryMuscle,
+    });
+    setManualOpen(exercise.id);
+    setAltTarget(null);
+    toast.success(`Übung durch „${exercise.name}“ ersetzt`);
   }
 
   return (
@@ -212,56 +251,85 @@ export function WorkoutPage() {
                 isActive ? "grid border-orange-500/40" : "block",
               )}
             >
-              {/* Kopfzeile ist zugleich der Auf-/Zuklapp-Schalter */}
-              <button
-                type="button"
-                onClick={() => setManualOpen(isActive ? null : group.exerciseId)}
-                aria-expanded={isActive}
-                className="flex w-full items-center gap-3 text-left"
-              >
-                {thumb ? (
-                  <img
-                    src={thumb}
-                    alt=""
-                    className={cn(
-                      "shrink-0 rounded-lg object-cover transition-all",
-                      isActive ? "h-12 w-12" : "h-10 w-10",
-                    )}
-                    loading="lazy"
-                  />
-                ) : (
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-xs text-muted-foreground">
-                    {index + 1}
-                  </span>
-                )}
-                <div className="min-w-0 flex-1">
-                  <CardTitle className="truncate">{group.name}</CardTitle>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {muscleLabel(group.primaryMuscle)}
-                    {group.targetReps ? ` · Ziel ${group.sets.length} × ${group.targetReps}` : ""}
-                    {group.suggestedWeight
-                      ? ` · Start ${kgToDisplay(group.suggestedWeight, unit)} ${unitLabel(unit)}`
-                      : ""}
-                  </p>
-                </div>
-                <span className="flex shrink-0 items-center gap-2">
-                  {groupCompleted ? (
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
-                      <Check className="h-3.5 w-3.5" />
-                    </span>
+              {/* Kopfzeile: links der Auf-/Zuklapp-Schalter, rechts Aktionen */}
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setManualOpen(isActive ? ALL_COLLAPSED : group.exerciseId)}
+                  aria-expanded={isActive}
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                >
+                  {thumb ? (
+                    <img
+                      src={thumb}
+                      alt=""
+                      className={cn(
+                        "shrink-0 rounded-lg object-cover transition-all",
+                        isActive ? "h-12 w-12" : "h-10 w-10",
+                      )}
+                      loading="lazy"
+                    />
                   ) : (
-                    <span className="text-xs tabular-nums text-muted-foreground">
-                      {done}/{group.sets.length}
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-xs text-muted-foreground">
+                      {index + 1}
                     </span>
                   )}
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 text-muted-foreground transition-transform",
-                      isActive && "rotate-180",
+                  <div className="min-w-0 flex-1">
+                    <CardTitle className="truncate">{group.name}</CardTitle>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {muscleLabel(group.primaryMuscle)}
+                      {group.targetReps ? ` · Ziel ${group.sets.length} × ${group.targetReps}` : ""}
+                      {group.suggestedWeight
+                        ? ` · Start ${kgToDisplay(group.suggestedWeight, unit)} ${unitLabel(unit)}`
+                        : ""}
+                    </p>
+                  </div>
+                </button>
+                <div className="flex shrink-0 items-center">
+                  <button
+                    type="button"
+                    className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted disabled:opacity-30"
+                    onClick={() => openAlternatives(group)}
+                    disabled={alternatives.isPending}
+                    aria-label={`Vergleichbare Übungen zu ${group.name} vorschlagen`}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted"
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: `${group.name} entfernen?`,
+                        description: `Alle ${group.sets.length} Sätze werden gelöscht.`,
+                        confirmLabel: "Entfernen",
+                        cancelLabel: "Abbrechen",
+                      });
+                      if (ok) workout.removeExercise(group.exerciseId);
+                    }}
+                    aria-label={`${group.name} entfernen`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                  <span className="flex items-center gap-2">
+                    {groupCompleted ? (
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
+                        <Check className="h-3.5 w-3.5" />
+                      </span>
+                    ) : (
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {done}/{group.sets.length}
+                      </span>
                     )}
-                  />
-                </span>
-              </button>
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 text-muted-foreground transition-transform",
+                        isActive && "rotate-180",
+                      )}
+                    />
+                  </span>
+                </div>
+              </div>
 
               {isActive ? (
                 <>
@@ -369,6 +437,79 @@ export function WorkoutPage() {
           if (first) setManualOpen(first.id);
         }}
       />
+
+      <Sheet
+        open={altTarget !== null}
+        onClose={() => setAltTarget(null)}
+        title="Vergleichbare Übungen"
+        description={altTarget ? `Alternativen zu „${altTarget.name}“` : undefined}
+      >
+        {alternatives.isPending ? (
+          <div className="grid gap-2 py-2">
+            <AiProgress active className="pb-1" />
+            {Array.from({ length: 3 }, (_, index) => (
+              <div key={index} className="h-16 animate-pulse rounded-xl bg-muted" />
+            ))}
+          </div>
+        ) : alternatives.isError ? (
+          <div className="grid justify-items-center gap-3 py-10">
+            <p className="text-center text-sm text-muted-foreground">
+              Vorschläge konnten nicht geladen werden.
+            </p>
+            <Button
+              variant="secondary"
+              onClick={() => altTarget && alternatives.mutate(altTarget.exerciseId)}
+            >
+              Erneut versuchen
+            </Button>
+          </div>
+        ) : !alternatives.data || alternatives.data.alternatives.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            Keine vergleichbaren Übungen im Katalog gefunden.
+          </p>
+        ) : (
+          <div className="grid gap-1.5 pb-4">
+            {alternatives.data.usedFallback ? (
+              <Badge variant="outline" className="w-fit">
+                Ohne KI ermittelt
+              </Badge>
+            ) : null}
+            {alternatives.data.alternatives.map((exercise) => {
+              const alreadyInPlan = grouped.some(
+                (g) => g.exerciseId === exercise.id && g.exerciseId !== altTarget?.exerciseId,
+              );
+              const thumb = getExerciseThumbnail(exercise.id);
+              return (
+                <button
+                  key={exercise.id}
+                  type="button"
+                  disabled={alreadyInPlan}
+                  onClick={() => applyAlternative(exercise)}
+                  className="flex min-h-[60px] w-full items-center gap-3 rounded-xl border border-border bg-card p-2 text-left transition-colors disabled:opacity-45 enabled:active:bg-muted"
+                >
+                  {thumb ? (
+                    <img
+                      src={thumb}
+                      alt=""
+                      className="h-11 w-11 shrink-0 rounded-lg object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="h-11 w-11 shrink-0 rounded-lg bg-muted" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{exercise.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {muscleLabel(exercise.primaryMuscle)}
+                      {alreadyInPlan ? " · bereits im Training" : ""}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </Sheet>
     </div>
   );
 }

@@ -236,6 +236,56 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
     [mutateSession],
   );
 
+  const removeExercise = useCallback(
+    (exerciseId: string) => {
+      mutateSession((current) => ({
+        ...current,
+        sets: current.sets.filter((set) => set.exerciseId !== exerciseId),
+        exercises: current.exercises.filter((ex) => ex.exerciseId !== exerciseId),
+      }));
+    },
+    [mutateSession],
+  );
+
+  const replaceExercise = useCallback(
+    (
+      oldExerciseId: string,
+      replacement: { exerciseId: string; name: string; primaryMuscle: string },
+    ) => {
+      mutateSession((current) => {
+        const oldSets = current.sets.filter((set) => set.exerciseId === oldExerciseId);
+        const setCount = Math.max(oldSets.length, 1);
+        const newSets: SetLog[] = Array.from({ length: setCount }, (_, index) => ({
+          id: crypto.randomUUID(),
+          workoutLogId: current.id,
+          exerciseId: replacement.exerciseId,
+          setNumber: index + 1,
+          weight: 0,
+          reps: 8,
+          isCompleted: false,
+        }));
+        return {
+          ...current,
+          exercises: current.exercises.map((ex) =>
+            ex.exerciseId === oldExerciseId
+              ? {
+                  ...ex,
+                  exerciseId: replacement.exerciseId,
+                  name: replacement.name,
+                  primaryMuscle: replacement.primaryMuscle,
+                }
+              : ex,
+          ),
+          sets: [
+            ...current.sets.filter((set) => set.exerciseId !== oldExerciseId),
+            ...newSets,
+          ],
+        };
+      });
+    },
+    [mutateSession],
+  );
+
   const addExercises = useCallback(
     (toAdd: AddableExercise[]) => {
       if (!toAdd.length) return;
@@ -347,6 +397,8 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
     addSet,
     removeSet,
     addExercises,
+    removeExercise,
+    replaceExercise,
     completeWorkout,
     stopRest,
     extendRest,
