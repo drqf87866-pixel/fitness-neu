@@ -13,6 +13,15 @@ import { cn } from "@/lib/utils";
 /** Verschachtelte Sheets sollen den Body-Scroll nur einmal freigeben. */
 let openSheetCount = 0;
 
+/**
+ * Marker aller aktuell geöffneten Sheets. Das History-Cleanup räumt seinen
+ * Eintrag nur ab, wenn der oberste History-Eintrag zu keinem geöffneten
+ * Sheet mehr gehört – sonst würde ein Schließen-dann-Öffnen im selben
+ * Commit (z. B. Menü zu + Confirm auf) per history.back() den frisch
+ * gepushten Eintrag des neuen Sheets sofort wieder poppen.
+ */
+const liveSheetMarkers = new Set<string>();
+
 function lockBodyScroll() {
   openSheetCount += 1;
   document.body.dataset.sheetOpen = "true";
@@ -118,6 +127,7 @@ export function Sheet({
   useEffect(() => {
     if (!open || !closeOnBack) return;
     const marker = `sheet:${titleId}`;
+    liveSheetMarkers.add(marker);
     window.history.pushState({ ...window.history.state, sheetMarker: marker }, "");
     let poppedByUser = false;
 
@@ -129,10 +139,22 @@ export function Sheet({
 
     return () => {
       window.removeEventListener("popstate", onPopState);
-      // Programmatisch geschlossen: unseren History-Eintrag wieder abräumen.
-      if (!poppedByUser && window.history.state?.sheetMarker === marker) {
+      liveSheetMarkers.delete(marker);
+      const wasPopped = poppedByUser;
+      // Aufgeschoben prüfen: Ein im selben Commit geöffnetes Sheet pusht
+      // seinen Eintrag erst, nachdem dieses Cleanup lief. Wer hier synchron
+      // history.back() riefe, würde dessen Eintrag poppen und das neue
+      // Sheet sofort wieder schließen. Jede schließende Instanz räumt
+      // höchstens einen verwaisten Eintrag ab.
+      queueMicrotask(() => {
+        if (wasPopped) return;
+        const top = window.history.state?.sheetMarker;
+        if (typeof top !== "string" || !top.startsWith("sheet:")) return;
+        // Gehört der oberste Eintrag noch zu einem geöffneten Sheet
+        // (z. B. dem gerade geöffneten Confirm), nichts tun.
+        if (liveSheetMarkers.has(top)) return;
         window.history.back();
-      }
+      });
     };
   }, [open, closeOnBack, titleId]);
 

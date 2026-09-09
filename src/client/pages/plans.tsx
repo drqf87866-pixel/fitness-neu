@@ -47,13 +47,18 @@ export function PlansPage() {
   });
 
   async function confirmDelete(plan: WorkoutPlan) {
-    setMenuPlan(null);
+    // Erst bestätigen, dann das Menü schließen: Das Confirm ist selbst ein
+    // Sheet mit eigenem History-Eintrag. Würde das Menü vorher schließen,
+    // würde dessen History-Cleanup per history.back() den frisch gepushten
+    // Confirm-Eintrag sofort wieder poppen – der Dialog schließt sich
+    // instant (bzw. erscheint gar nicht) und das Löschen wird nie erreicht.
     const ok = await confirm({
       title: "Plan löschen?",
       description: `„${plan.title}" wird dauerhaft entfernt. Bereits absolvierte Trainings bleiben im Verlauf erhalten.`,
       confirmLabel: "Löschen",
       destructive: true,
     });
+    setMenuPlan(null);
     if (ok) remove.mutate(plan.id);
   }
 

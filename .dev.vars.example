@@ -1,0 +1,6 @@
+# Lokale Worker-Secrets (gitignored, siehe .gitignore).
+# Kopieren mit: cp .dev.vars.example .dev.vars
+# Remote stattdessen: wrangler secret put GEMINI_API_KEY
+
+# Optional: ohne Key nutzt die KI-Generierung einen Fallback-Plan.
+GEMINI_API_KEY=
