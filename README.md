@@ -115,7 +115,7 @@ scripts/         # Bild-/Icon-Hilfsskripte (z. B. Download, Icon-Generierung)
 ## Hinweise
 
 - **PWA/Offline:** Service Worker cacht nur lesende `GET /api/exercises`-Requests (`NetworkFirst`, 1 h). Auth-, Session- und Analytics-Requests bleiben `NetworkOnly`. Offene Sets werden in IndexedDB (`fitness-neu`) zwischengespeichert und synchronisiert.
-- **Bilder:** Übungsbilder in `public/exercises/` stammen aus `yuhonas/free-exercise-db` (siehe `scripts/`). Nicht jede Übung hat ein Bild.
+- **Bilder:** Übungsbilder in `public/exercises/` stammen aus zwei Open-Source-Quellen (Fotos aus `yuhonas/free-exercise-db`, Illustrationen aus `@bryllim/workout-guide`/Everkinetic für Übungen ohne Foto-Treffer) — siehe `scripts/` und [CREDITS.md](CREDITS.md) für Details und Lizenzen.
 - **Artefakte:** `dist/`, `.wrangler/` und `node_modules/` werden nicht versioniert.
 
 ## Roadmap

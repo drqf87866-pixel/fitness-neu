@@ -14,13 +14,30 @@ import { cn } from "@/lib/utils";
 let openSheetCount = 0;
 
 /**
- * Marker aller aktuell geöffneten Sheets. Das History-Cleanup räumt seinen
- * Eintrag nur ab, wenn der oberste History-Eintrag zu keinem geöffneten
- * Sheet mehr gehört – sonst würde ein Schließen-dann-Öffnen im selben
- * Commit (z. B. Menü zu + Confirm auf) per history.back() den frisch
- * gepushten Eintrag des neuen Sheets sofort wieder poppen.
+ * Verschachtelte Sheets (z. B. Optionsmenü → Bestätigung) bilden einen
+ * gemeinsamen Stapel mit genau EINEM History-Eintrag statt einem pro Sheet.
+ * Schließen mehrere Sheets im selben Zug (z. B. Confirm bestätigen, das
+ * danach auch das Menü zumacht), würde ein Eintrag pro Sheet zwei
+ * `history.back()`-Aufrufe kurz hintereinander auslösen – das kann in
+ * mobilen WebViews zu einem spürbaren Hänger führen. Android-Zurück schließt
+ * immer nur das oberste Sheet im Stapel; bleiben danach weitere offen, wird
+ * sofort ein neuer Eintrag für den Rest-Stapel nachgeschoben.
  */
-const liveSheetMarkers = new Set<string>();
+const sheetStack: Array<() => void> = [];
+let stackOwnsHistoryEntry = false;
+let stackPoppedByUser = false;
+
+function pushStackHistoryEntry() {
+  window.history.pushState({ ...window.history.state, sheetMarker: "sheet-stack" }, "");
+  stackOwnsHistoryEntry = true;
+  stackPoppedByUser = false;
+}
+
+function onStackPopState() {
+  stackOwnsHistoryEntry = false;
+  stackPoppedByUser = true;
+  sheetStack[sheetStack.length - 1]?.();
+}
 
 function lockBodyScroll() {
   openSheetCount += 1;
@@ -126,37 +143,35 @@ export function Sheet({
   // wird mitgenommen, damit react-router seinen Eintrag behält.
   useEffect(() => {
     if (!open || !closeOnBack) return;
-    const marker = `sheet:${titleId}`;
-    liveSheetMarkers.add(marker);
-    window.history.pushState({ ...window.history.state, sheetMarker: marker }, "");
-    let poppedByUser = false;
-
-    const onPopState = () => {
-      poppedByUser = true;
-      onCloseRef.current();
-    };
-    window.addEventListener("popstate", onPopState);
+    const close = () => onCloseRef.current();
+    sheetStack.push(close);
+    if (sheetStack.length === 1) {
+      window.addEventListener("popstate", onStackPopState);
+      pushStackHistoryEntry();
+    }
 
     return () => {
-      window.removeEventListener("popstate", onPopState);
-      liveSheetMarkers.delete(marker);
-      const wasPopped = poppedByUser;
-      // Aufgeschoben prüfen: Ein im selben Commit geöffnetes Sheet pusht
-      // seinen Eintrag erst, nachdem dieses Cleanup lief. Wer hier synchron
-      // history.back() riefe, würde dessen Eintrag poppen und das neue
-      // Sheet sofort wieder schließen. Jede schließende Instanz räumt
-      // höchstens einen verwaisten Eintrag ab.
-      queueMicrotask(() => {
-        if (wasPopped) return;
-        const top = window.history.state?.sheetMarker;
-        if (typeof top !== "string" || !top.startsWith("sheet:")) return;
-        // Gehört der oberste Eintrag noch zu einem geöffneten Sheet
-        // (z. B. dem gerade geöffneten Confirm), nichts tun.
-        if (liveSheetMarkers.has(top)) return;
+      const index = sheetStack.lastIndexOf(close);
+      if (index !== -1) sheetStack.splice(index, 1);
+
+      if (sheetStack.length > 0) {
+        // Weitere Sheets im Stapel offen (z. B. Menü unter der gerade
+        // geschlossenen Bestätigung). War der Eintrag gerade erst per
+        // Zurück-Geste konsumiert, braucht der Rest-Stapel einen neuen,
+        // damit ein erneutes Zurück auch das nächste Sheet schließt statt
+        // die Seite zu verlassen.
+        if (stackPoppedByUser && !stackOwnsHistoryEntry) pushStackHistoryEntry();
+        return;
+      }
+
+      window.removeEventListener("popstate", onStackPopState);
+      if (stackOwnsHistoryEntry && !stackPoppedByUser) {
+        stackOwnsHistoryEntry = false;
         window.history.back();
-      });
+      }
+      stackPoppedByUser = false;
     };
-  }, [open, closeOnBack, titleId]);
+  }, [open, closeOnBack]);
 
   const endDrag = useCallback(() => {
     if (dragStart.current === null) return;

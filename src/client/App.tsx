@@ -107,9 +107,20 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <ConfirmProvider>
         <RouterProvider router={router} />
-        {/* Unten, damit Meldungen nicht den Header verdecken; der Offset hält
-            sie über der Bottom-Navigation. */}
-        <Toaster theme="dark" position="bottom-center" offset={88} />
+        {/* Unten, damit Meldungen nicht den Header verdecken. Der Offset hält
+            sie über der Bottom-Navigation (56px hohe Zeile + Abstand) und
+            berücksichtigt zusätzlich die Safe-Area – ein fester Pixelwert
+            reichte auf Geräten mit Home-Indicator nicht aus und der Toast
+            überlappte dort die Nav für seine Anzeigedauer. Sonner nutzt unter
+            600px Viewportbreite (praktisch jedes Handy) eine eigene
+            --mobile-offset-Variable statt --offset – ohne mobileOffset bleibt
+            der obige Offset dort wirkungslos. */}
+        <Toaster
+          theme="dark"
+          position="bottom-center"
+          offset="calc(56px + 16px + env(safe-area-inset-bottom))"
+          mobileOffset="calc(56px + 16px + env(safe-area-inset-bottom))"
+        />
       </ConfirmProvider>
     </QueryClientProvider>
   );

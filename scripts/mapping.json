@@ -78,12 +78,6 @@
     "Image1": "Bent_Over_Barbell_Row/1.jpg"
   },
   {
-    "Id": "ex_einarm_rudern",
-    "ExerciseName": "One-Arm Dumbbell Row",
-    "Image0": "One-Arm_Dumbbell_Row/0.jpg",
-    "Image1": "One-Arm_Dumbbell_Row/1.jpg"
-  },
-  {
     "Id": "ex_kreuzheben",
     "ExerciseName": "Barbell Deadlift",
     "Image0": "Barbell_Deadlift/0.jpg",
@@ -240,12 +234,6 @@
     "Image1": "Cable_Chest_Press/1.jpg"
   },
   {
-    "Id": "ex_brustpresse",
-    "ExerciseName": "Decline Smith Press",
-    "Image0": "Decline_Smith_Press/0.jpg",
-    "Image1": "Decline_Smith_Press/1.jpg"
-  },
-  {
     "Id": "ex_brustpresse_schraeg",
     "ExerciseName": "Decline Smith Press",
     "Image0": "Decline_Smith_Press/0.jpg",
@@ -280,12 +268,6 @@
     "ExerciseName": "Wide-Grip Lat Pulldown",
     "Image0": "Wide-Grip_Lat_Pulldown/0.jpg",
     "Image1": "Wide-Grip_Lat_Pulldown/1.jpg"
-  },
-  {
-    "Id": "ex_latzug_eng",
-    "ExerciseName": "One Arm Lat Pulldown",
-    "Image0": "One_Arm_Lat_Pulldown/0.jpg",
-    "Image1": "One_Arm_Lat_Pulldown/1.jpg"
   },
   {
     "Id": "ex_latzug_neutral",
@@ -408,12 +390,6 @@
     "Image1": "Face_Pull/1.jpg"
   },
   {
-    "Id": "ex_kabel_seitheben",
-    "ExerciseName": "Wide-Grip Pulldown Behind The Neck",
-    "Image0": "Wide-Grip_Pulldown_Behind_The_Neck/0.jpg",
-    "Image1": "Wide-Grip_Pulldown_Behind_The_Neck/1.jpg"
-  },
-  {
     "Id": "ex_kabel_seitheben_einarmig",
     "ExerciseName": "Wide-Grip Pulldown Behind The Neck",
     "Image0": "Wide-Grip_Pulldown_Behind_The_Neck/0.jpg",
@@ -456,22 +432,10 @@
     "Image1": "Triceps_Pushdown/1.jpg"
   },
   {
-    "Id": "ex_schulterpresse_maschine",
-    "ExerciseName": "Decline Smith Press",
-    "Image0": "Decline_Smith_Press/0.jpg",
-    "Image1": "Decline_Smith_Press/1.jpg"
-  },
-  {
     "Id": "ex_schulterpresse_konvergent",
     "ExerciseName": "Decline Smith Press",
     "Image0": "Decline_Smith_Press/0.jpg",
     "Image1": "Decline_Smith_Press/1.jpg"
-  },
-  {
-    "Id": "ex_seitheben_maschine",
-    "ExerciseName": "Smith Machine Behind the Back Shrug",
-    "Image0": "Smith_Machine_Behind_the_Back_Shrug/0.jpg",
-    "Image1": "Smith_Machine_Behind_the_Back_Shrug/1.jpg"
   },
   {
     "Id": "ex_reverse_fly_maschine",
@@ -558,12 +522,6 @@
     "Image1": "Bicycling_Stationary/1.jpg"
   },
   {
-    "Id": "ex_beinbeuger_sitzend",
-    "ExerciseName": "Bicycling, Stationary",
-    "Image0": "Bicycling_Stationary/0.jpg",
-    "Image1": "Bicycling_Stationary/1.jpg"
-  },
-  {
     "Id": "ex_beinbeuger_stehend",
     "ExerciseName": "Bicycling, Stationary",
     "Image0": "Bicycling_Stationary/0.jpg",
@@ -594,18 +552,6 @@
     "Image1": "Bicycling_Stationary/1.jpg"
   },
   {
-    "Id": "ex_abduktoren",
-    "ExerciseName": "Bicycling, Stationary",
-    "Image0": "Bicycling_Stationary/0.jpg",
-    "Image1": "Bicycling_Stationary/1.jpg"
-  },
-  {
-    "Id": "ex_adduktoren",
-    "ExerciseName": "Bicycling, Stationary",
-    "Image0": "Bicycling_Stationary/0.jpg",
-    "Image1": "Bicycling_Stationary/1.jpg"
-  },
-  {
     "Id": "ex_kabel_kickback",
     "ExerciseName": "One-Legged Cable Kickback",
     "Image0": "One-Legged_Cable_Kickback/0.jpg",
@@ -628,12 +574,6 @@
     "ExerciseName": "Standing Calf Raises",
     "Image0": "Standing_Calf_Raises/0.jpg",
     "Image1": "Standing_Calf_Raises/1.jpg"
-  },
-  {
-    "Id": "ex_wadenheben_sitzend",
-    "ExerciseName": "Bicycling, Stationary",
-    "Image0": "Bicycling_Stationary/0.jpg",
-    "Image1": "Bicycling_Stationary/1.jpg"
   },
   {
     "Id": "ex_wadenheben_beinpresse",
@@ -666,12 +606,6 @@
     "Image1": "Alternating_Cable_Shoulder_Press/1.jpg"
   },
   {
-    "Id": "ex_trizeps_ueberkopf_seil",
-    "ExerciseName": "Alternating Cable Shoulder Press",
-    "Image0": "Alternating_Cable_Shoulder_Press/0.jpg",
-    "Image1": "Alternating_Cable_Shoulder_Press/1.jpg"
-  },
-  {
     "Id": "ex_trizeps_kickback_kabel",
     "ExerciseName": "Alternating Cable Shoulder Press",
     "Image0": "Alternating_Cable_Shoulder_Press/0.jpg",
@@ -682,12 +616,6 @@
     "ExerciseName": "Cable One Arm Tricep Extension",
     "Image0": "Cable_One_Arm_Tricep_Extension/0.jpg",
     "Image1": "Cable_One_Arm_Tricep_Extension/1.jpg"
-  },
-  {
-    "Id": "ex_trizepsmaschine",
-    "ExerciseName": "Decline Smith Press",
-    "Image0": "Decline_Smith_Press/0.jpg",
-    "Image1": "Decline_Smith_Press/1.jpg"
   },
   {
     "Id": "ex_kabelcurl_stange",
@@ -808,12 +736,6 @@
     "ExerciseName": "Ab Crunch Machine",
     "Image0": "Ab_Crunch_Machine/0.jpg",
     "Image1": "Ab_Crunch_Machine/1.jpg"
-  },
-  {
-    "Id": "ex_rueckenstrecker",
-    "ExerciseName": "Rowing, Stationary",
-    "Image0": "Rowing_Stationary/0.jpg",
-    "Image1": "Rowing_Stationary/1.jpg"
   },
   {
     "Id": "ex_laufband",

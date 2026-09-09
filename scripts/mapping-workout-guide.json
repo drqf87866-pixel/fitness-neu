@@ -1,0 +1,145 @@
+[
+  {
+    "Id": "ex_abduktoren",
+    "Slug": "hip-abduction-machine",
+    "ExerciseName": "Hip Abduction Machine",
+    "Equipment": "Machine",
+    "Creator": "Bryl Lim",
+    "CreatorUrl": "https://bryllim.com",
+    "License": "CC BY-SA 4.0",
+    "LicenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "EverkineticSourceUrl": null
+  },
+  {
+    "Id": "ex_adduktoren",
+    "Slug": "hip-adduction-machine",
+    "ExerciseName": "Hip Adduction Machine",
+    "Equipment": "Machine",
+    "Creator": "Bryl Lim",
+    "CreatorUrl": "https://bryllim.com",
+    "License": "CC BY-SA 4.0",
+    "LicenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "EverkineticSourceUrl": null
+  },
+  {
+    "Id": "ex_beinbeuger_sitzend",
+    "Slug": "seated-leg-curl",
+    "ExerciseName": "Seated Leg Curl",
+    "Equipment": "Machine",
+    "Creator": "Bryl Lim",
+    "CreatorUrl": "https://bryllim.com",
+    "License": "CC BY-SA 4.0",
+    "LicenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "EverkineticSourceUrl": "https://github.com/everkinetic/data/blob/main/dist/svg/0119-tension.svg"
+  },
+  {
+    "Id": "ex_brustpresse",
+    "Slug": "machine-chest-press",
+    "ExerciseName": "Machine Chest Press",
+    "Equipment": "Machine",
+    "Creator": "Bryl Lim",
+    "CreatorUrl": "https://bryllim.com",
+    "License": "CC BY-SA 4.0",
+    "LicenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "EverkineticSourceUrl": "https://github.com/everkinetic/data/blob/main/dist/svg/0066-tension.svg"
+  },
+  {
+    "Id": "ex_einarm_rudern",
+    "Slug": "one-arm-dumbbell-row",
+    "ExerciseName": "One-Arm Dumbbell Row",
+    "Equipment": "Dumbbell",
+    "Creator": "Bryl Lim",
+    "CreatorUrl": "https://bryllim.com",
+    "License": "CC BY-SA 4.0",
+    "LicenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "EverkineticSourceUrl": null
+  },
+  {
+    "Id": "ex_kabel_seitheben",
+    "Slug": "cable-lateral-raise",
+    "ExerciseName": "Cable Lateral Raise",
+    "Equipment": "Cable",
+    "Creator": "Bryl Lim",
+    "CreatorUrl": "https://bryllim.com",
+    "License": "CC BY-SA 4.0",
+    "LicenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "EverkineticSourceUrl": null
+  },
+  {
+    "Id": "ex_latzug_eng",
+    "Slug": "close-grip-lat-pulldown",
+    "ExerciseName": "Close-Grip Lat Pulldown",
+    "Equipment": "Cable",
+    "Creator": "Bryl Lim",
+    "CreatorUrl": "https://bryllim.com",
+    "License": "CC BY-SA 4.0",
+    "LicenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "EverkineticSourceUrl": "https://github.com/everkinetic/data/blob/main/dist/svg/0096-tension.svg"
+  },
+  {
+    "Id": "ex_rueckenstrecker",
+    "Slug": "back-extension",
+    "ExerciseName": "Back Extension",
+    "Equipment": "Bodyweight",
+    "Creator": "Bryl Lim",
+    "CreatorUrl": "https://bryllim.com",
+    "License": "CC BY-SA 4.0",
+    "LicenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "EverkineticSourceUrl": "https://github.com/everkinetic/data/blob/main/dist/svg/0103-tension.svg"
+  },
+  {
+    "Id": "ex_schulterpresse_maschine",
+    "Slug": "machine-shoulder-press",
+    "ExerciseName": "Machine Shoulder Press",
+    "Equipment": "Machine",
+    "Creator": "Bryl Lim",
+    "CreatorUrl": "https://bryllim.com",
+    "License": "CC BY-SA 4.0",
+    "LicenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "EverkineticSourceUrl": null
+  },
+  {
+    "Id": "ex_seitheben_maschine",
+    "Slug": "machine-lateral-raise",
+    "ExerciseName": "Machine Lateral Raise",
+    "Equipment": "Machine",
+    "Creator": "Bryl Lim",
+    "CreatorUrl": "https://bryllim.com",
+    "License": "CC BY-SA 4.0",
+    "LicenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "EverkineticSourceUrl": null
+  },
+  {
+    "Id": "ex_trizeps_ueberkopf_seil",
+    "Slug": "overhead-tricep-extension",
+    "ExerciseName": "Overhead Tricep Extension",
+    "Equipment": "Cable",
+    "Creator": "Bryl Lim",
+    "CreatorUrl": "https://bryllim.com",
+    "License": "CC BY-SA 4.0",
+    "LicenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "EverkineticSourceUrl": null
+  },
+  {
+    "Id": "ex_trizepsmaschine",
+    "Slug": "tricep-pushdown",
+    "ExerciseName": "Tricep Pushdown",
+    "Equipment": "Cable",
+    "Creator": "Bryl Lim",
+    "CreatorUrl": "https://bryllim.com",
+    "License": "CC BY-SA 4.0",
+    "LicenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "EverkineticSourceUrl": "https://github.com/everkinetic/data/blob/main/dist/svg/0205-tension.svg"
+  },
+  {
+    "Id": "ex_wadenheben_sitzend",
+    "Slug": "seated-calf-raise",
+    "ExerciseName": "Seated Calf Raise",
+    "Equipment": "Machine",
+    "Creator": "Bryl Lim",
+    "CreatorUrl": "https://bryllim.com",
+    "License": "CC BY-SA 4.0",
+    "LicenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "EverkineticSourceUrl": "https://github.com/everkinetic/data/blob/main/dist/svg/0279-tension.svg"
+  }
+]
