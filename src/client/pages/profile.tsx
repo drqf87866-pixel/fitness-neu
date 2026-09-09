@@ -92,7 +92,7 @@ export function ProfilePage() {
           <Field>
             <Label>Ziel</Label>
             <select
-              className="h-11 rounded-lg border border-input bg-muted px-3 text-sm"
+              className="h-11 rounded-lg border border-input bg-muted px-3 text-base"
               value={form.targetGoal ?? "hypertrophy"}
               onChange={(e) =>
                 setForm({ ...form, targetGoal: e.target.value })
@@ -108,7 +108,7 @@ export function ProfilePage() {
           <Field>
             <Label>Erfahrung</Label>
             <select
-              className="h-11 rounded-lg border border-input bg-muted px-3 text-sm"
+              className="h-11 rounded-lg border border-input bg-muted px-3 text-base"
               value={form.experienceLevel ?? "beginner"}
               onChange={(e) =>
                 setForm({
@@ -169,7 +169,7 @@ export function ProfilePage() {
           <Field>
             <Label>Einheit</Label>
             <select
-              className="h-11 rounded-lg border border-input bg-muted px-3 text-sm"
+              className="h-11 rounded-lg border border-input bg-muted px-3 text-base"
               value={form.unit ?? "kg"}
               onChange={(e) =>
                 setForm({

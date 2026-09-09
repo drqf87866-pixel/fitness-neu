@@ -415,7 +415,7 @@ export function ExercisesPage() {
             <Label htmlFor="ex-category">Kategorie</Label>
             <select
               id="ex-category"
-              className="h-11 rounded-lg border border-input bg-muted px-3 text-sm"
+              className="h-11 rounded-lg border border-input bg-muted px-3 text-base"
               value={category}
               onChange={(event) => setCategory(event.target.value as ExerciseCategory)}
             >
@@ -430,7 +430,7 @@ export function ExercisesPage() {
             <Label htmlFor="ex-muscle">Muskelgruppe</Label>
             <select
               id="ex-muscle"
-              className="h-11 rounded-lg border border-input bg-muted px-3 text-sm"
+              className="h-11 rounded-lg border border-input bg-muted px-3 text-base"
               value={primaryMuscle}
               onChange={(event) => setPrimaryMuscle(event.target.value)}
             >
@@ -455,7 +455,7 @@ export function ExercisesPage() {
             <Label htmlFor="ex-equipment">Equipment</Label>
             <select
               id="ex-equipment"
-              className="h-11 rounded-lg border border-input bg-muted px-3 text-sm"
+              className="h-11 rounded-lg border border-input bg-muted px-3 text-base"
               value={equipment}
               onChange={(event) => setEquipment(event.target.value)}
             >
