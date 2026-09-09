@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { toSetPayload } from "@/lib/sync";
 import {
   clearLocalSession,
   enqueueRequest,
@@ -31,28 +32,36 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
   const [loadFailed, setLoadFailed] = useState(false);
   const online = useOnline();
   const timer = useRef<number | null>(null);
+  const sessionRef = useRef<WorkoutSession | null>(null);
+  const previousRef = useRef<PreviousSet[]>([]);
+
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
+
+  useEffect(() => {
+    previousRef.current = previous;
+  }, [previous]);
+
+  useEffect(() => {
+    return () => {
+      if (timer.current) window.clearTimeout(timer.current);
+    };
+  }, []);
 
   const persist = useCallback(
     async (next: WorkoutSession, prev: PreviousSet[], remote: boolean) => {
       await saveLocalSession(next, prev, !remote);
       if (!remote) return;
+      const body = { sets: toSetPayload(next.sets) };
       try {
         await api(`/api/sessions/${next.id}/sets`, {
           method: "PUT",
-          body: JSON.stringify({
-            sets: next.sets.map((set) => ({
-              id: set.id,
-              exerciseId: set.exerciseId,
-              setNumber: set.setNumber,
-              weight: set.weight,
-              reps: set.reps,
-              isCompleted: set.isCompleted,
-            })),
-          }),
+          body: JSON.stringify(body),
         });
         await saveLocalSession(next, prev, false);
       } catch {
-        await enqueueRequest("PUT", `/api/sessions/${next.id}/sets`, { sets: next.sets });
+        await enqueueRequest("PUT", `/api/sessions/${next.id}/sets`, body);
       }
     },
     [],
@@ -102,15 +111,15 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
   /** Gemeinsamer Pfad für alle Satz-Mutationen: State setzen und gepuffert speichern. */
   const mutateSession = useCallback(
     (update: (current: WorkoutSession) => WorkoutSession) => {
-      setSession((current) => {
-        if (!current) return current;
-        const next = update(current);
-        if (next === current) return current;
-        schedulePersist(next, previous);
-        return next;
-      });
+      const current = sessionRef.current;
+      if (!current) return;
+      const next = update(current);
+      if (next === current) return;
+      sessionRef.current = next;
+      setSession(next);
+      schedulePersist(next, previousRef.current);
     },
-    [previous, schedulePersist],
+    [schedulePersist],
   );
 
   const updateSet = useCallback(
@@ -156,26 +165,26 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
 
   const toggleSet = useCallback(
     (setId: string) => {
-      // Bewusst aus dem aktuellen State gelesen und nicht im setState-Updater:
-      // dessen Rückgabe steht erst beim nächsten Render fest, die Pause muss
-      // aber sofort beim Tippen starten.
-      const target = session?.sets.find((set) => set.id === setId);
-      if (!target) return;
+      // Über Ref statt Render-Closure lesen: zwei schnelle Taps vor dem
+      // nächsten Render sehen dadurch den jeweils aktuellen Stand.
+      const current = sessionRef.current;
+      const target = current?.sets.find((set) => set.id === setId);
+      if (!current || !target) return;
       const nextCompleted = !target.isCompleted;
 
-      mutateSession((current) => ({
-        ...current,
-        sets: current.sets.map((set) =>
+      mutateSession((prev) => ({
+        ...prev,
+        sets: prev.sets.map((set) =>
           set.id === setId ? { ...set, isCompleted: nextCompleted } : set,
         ),
       }));
 
       if (!nextCompleted) return;
-      const meta = session?.exercises.find((ex) => ex.exerciseId === target.exerciseId);
+      const meta = current.exercises.find((ex) => ex.exerciseId === target.exerciseId);
       navigator.vibrate?.(40);
       startRest(meta?.restSeconds ?? DEFAULT_REST_SECONDS);
     },
-    [session, mutateSession, startRest],
+    [mutateSession, startRest],
   );
 
   const addSet = useCallback(
@@ -270,25 +279,27 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
 
   const completeWorkout = useCallback(
     async (notes?: string) => {
-      if (!session) return;
-      const payload = { completedAt: Date.now(), notes: notes ?? session.notes };
+      const current = sessionRef.current;
+      if (!current) return;
+      const prev = previousRef.current;
+      const payload = { completedAt: Date.now(), notes: notes ?? current.notes };
       try {
-        await persist(session, previous, navigator.onLine);
+        await persist(current, prev, navigator.onLine);
         if (navigator.onLine) {
-          await api(`/api/sessions/${session.id}`, {
+          await api(`/api/sessions/${current.id}`, {
             method: "PATCH",
             body: JSON.stringify(payload),
           });
         } else {
-          await enqueueRequest("PATCH", `/api/sessions/${session.id}`, payload);
+          await enqueueRequest("PATCH", `/api/sessions/${current.id}`, payload);
         }
-        await clearLocalSession(session.id);
+        await clearLocalSession(current.id);
       } catch {
-        await enqueueRequest("PATCH", `/api/sessions/${session.id}`, payload);
+        await enqueueRequest("PATCH", `/api/sessions/${current.id}`, payload);
         toast.message("Workout lokal gespeichert, Sync folgt online.");
       }
     },
-    [persist, previous, session],
+    [persist],
   );
 
   const grouped = useMemo(() => {

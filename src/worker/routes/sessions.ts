@@ -4,7 +4,7 @@ import { exercises, planExercises, setLogs, workoutLogs, workoutPlans } from "..
 import { patchSessionSchema, startSessionSchema, upsertSetsSchema } from "../../shared/schemas";
 import type { PreviousSet, SessionSummary, SetLog, WorkoutSession } from "../../shared/types";
 import type { AppEnv } from "../env";
-import { dbFrom } from "../lib/helpers";
+import { batchAll, dbFrom, findInaccessibleExerciseIds } from "../lib/helpers";
 import { parseJson } from "../lib/parse";
 
 export const sessionRoutes = new Hono<AppEnv>();
@@ -102,22 +102,42 @@ async function loadSession(
   };
 }
 
-async function insertSetsChunked(
-  db: ReturnType<typeof dbFrom>,
-  rows: Array<{
-    id: string;
-    workoutLogId: string;
-    exerciseId: string;
-    setNumber: number;
-    weight: number;
-    reps: number;
-    isCompleted: boolean;
-  }>,
-) {
+type SetRow = {
+  id: string;
+  workoutLogId: string;
+  exerciseId: string;
+  setNumber: number;
+  weight: number;
+  reps: number;
+  isCompleted: boolean;
+};
+
+async function insertSetsBatch(db: ReturnType<typeof dbFrom>, rows: SetRow[]) {
+  if (!rows.length) return;
   const size = 10;
+  const stmts: Parameters<typeof batchAll>[1] = [];
   for (let i = 0; i < rows.length; i += size) {
-    await db.insert(setLogs).values(rows.slice(i, i + size));
+    stmts.push(db.insert(setLogs).values(rows.slice(i, i + size)));
   }
+  await batchAll(db, stmts);
+}
+
+async function replaceSetsBatch(
+  db: ReturnType<typeof dbFrom>,
+  workoutLogId: string,
+  rows: SetRow[],
+) {
+  const del = db.delete(setLogs).where(eq(setLogs.workoutLogId, workoutLogId));
+  if (!rows.length) {
+    await del;
+    return;
+  }
+  const size = 10;
+  const stmts: Parameters<typeof batchAll>[1] = [del];
+  for (let i = 0; i < rows.length; i += size) {
+    stmts.push(db.insert(setLogs).values(rows.slice(i, i + size)));
+  }
+  await batchAll(db, stmts);
 }
 
 function rowsFromPlan(
@@ -258,6 +278,15 @@ sessionRoutes.post("/", async (c) => {
   const userId = c.get("userId");
   const id = parsed.data.id ?? crypto.randomUUID();
 
+  if (parsed.data.planId) {
+    const [plan] = await db
+      .select({ id: workoutPlans.id })
+      .from(workoutPlans)
+      .where(and(eq(workoutPlans.id, parsed.data.planId), eq(workoutPlans.userId, userId)))
+      .limit(1);
+    if (!plan) return c.json({ error: "Plan nicht gefunden" }, 400);
+  }
+
   const [existing] = await db
     .select()
     .from(workoutLogs)
@@ -277,29 +306,30 @@ sessionRoutes.post("/", async (c) => {
     if (session && session.sets.length === 0 && session.planId) {
       const planned = await db.select().from(planExercises).where(eq(planExercises.planId, session.planId));
       if (planned.length) {
-        await insertSetsChunked(db, rowsFromPlan(open.id, planned));
+        await insertSetsBatch(db, rowsFromPlan(open.id, planned));
         return c.json({ session: await loadSession(db, open.id, userId) });
       }
     }
     return c.json({ session });
   }
 
-  await db.insert(workoutLogs).values({
-    id,
-    userId,
-    planId: parsed.data.planId ?? null,
-    startedAt: Date.now(),
-  });
-
-  if (parsed.data.planId) {
-    const planned = await db
-      .select()
-      .from(planExercises)
-      .where(eq(planExercises.planId, parsed.data.planId));
-    if (planned.length) {
-      await insertSetsChunked(db, rowsFromPlan(id, planned));
-    }
+  const startedAt = Date.now();
+  const planned = parsed.data.planId
+    ? await db.select().from(planExercises).where(eq(planExercises.planId, parsed.data.planId))
+    : [];
+  const setRows = rowsFromPlan(id, planned);
+  const stmts: Parameters<typeof batchAll>[1] = [
+    db.insert(workoutLogs).values({
+      id,
+      userId,
+      planId: parsed.data.planId ?? null,
+      startedAt,
+    }),
+  ];
+  for (let i = 0; i < setRows.length; i += 10) {
+    stmts.push(db.insert(setLogs).values(setRows.slice(i, i + 10)));
   }
+  await batchAll(db, stmts);
 
   return c.json({ session: await loadSession(db, id, userId) }, 201);
 });
@@ -336,8 +366,10 @@ sessionRoutes.delete("/:id", async (c) => {
   if (!session) return c.json({ error: "Session nicht gefunden" }, 404);
   if (!session.completedAt) return c.json({ error: "Offene Sessions können nicht gelöscht werden" }, 409);
 
-  await db.delete(setLogs).where(eq(setLogs.workoutLogId, id));
-  await db.delete(workoutLogs).where(and(eq(workoutLogs.id, id), eq(workoutLogs.userId, userId)));
+  await db.batch([
+    db.delete(setLogs).where(eq(setLogs.workoutLogId, id)),
+    db.delete(workoutLogs).where(and(eq(workoutLogs.id, id), eq(workoutLogs.userId, userId))),
+  ]);
 
   return c.body(null, 204);
 });
@@ -351,9 +383,16 @@ sessionRoutes.put("/:id/sets", async (c) => {
   if (!session) return c.json({ error: "Session nicht gefunden" }, 404);
   if (session.completedAt) return c.json({ error: "Session ist bereits abgeschlossen" }, 409);
 
-  await db.delete(setLogs).where(eq(setLogs.workoutLogId, id));
-  await insertSetsChunked(
+  const bad = await findInaccessibleExerciseIds(
     db,
+    c.get("userId"),
+    parsed.data.sets.map((set) => set.exerciseId),
+  );
+  if (bad.length) return c.json({ error: "Unbekannte oder fremde Übung in den Sätzen" }, 400);
+
+  await replaceSetsBatch(
+    db,
+    id,
     parsed.data.sets.map((set) => ({
       id: set.id ?? crypto.randomUUID(),
       workoutLogId: id,

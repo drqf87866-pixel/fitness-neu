@@ -50,17 +50,26 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: "/index.html",
-        globPatterns: ["**/*.{js,css,html,svg,ico,woff2,png}"],
+        navigateFallbackDenylist: [/^\/api\//],
+        globPatterns: ["**/*.{js,css,html,svg,ico,woff2,png,jpg,jpeg,webp}"],
+        // Nur lesende Katalog-Requests cachen. Auth/Sessions/Analytics bleiben
+        // immer NetworkOnly, sonst liefert der SW bei langsamem Netz (>4s)
+        // 24h alte /me-/open-/Volumen-Stände zurück.
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.pathname.startsWith("/api/"),
+            urlPattern: ({ url, request }) =>
+              request.method === "GET" && url.pathname.startsWith("/api/exercises"),
             handler: "NetworkFirst",
+            method: "GET",
             options: {
-              cacheName: "api-cache",
+              cacheName: "exercises-cache",
               networkTimeoutSeconds: 4,
+              cacheableResponse: {
+                statuses: [200],
+              },
               expiration: {
-                maxEntries: 80,
-                maxAgeSeconds: 60 * 60 * 24,
+                maxEntries: 40,
+                maxAgeSeconds: 60 * 60,
               },
             },
           },

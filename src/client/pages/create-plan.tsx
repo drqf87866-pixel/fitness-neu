@@ -105,7 +105,10 @@ export function CreatePlanPage() {
   const canSave =
     title.trim().length > 0 &&
     items.length > 0 &&
-    items.every((item) => item.targetReps.trim().length > 0) &&
+    items.every(
+      (item) =>
+        item.targetReps.trim().length > 0 && item.targetSets >= 1 && item.targetSets <= 20,
+    ) &&
     !save.isPending;
 
   return (
@@ -228,7 +231,7 @@ export function CreatePlanPage() {
                       value={item.targetSets}
                       onCommit={(next) => updateItem(item.exerciseId, { targetSets: next })}
                       min={1}
-                      max={30}
+                      max={20}
                       ariaLabel={`Sätze für ${item.name}`}
                     />
                   </div>

@@ -4,38 +4,32 @@ import { planExercises, workoutPlans } from "../../db/schema";
 import { planCreateSchema, planUpdateSchema } from "../../shared/schemas";
 import type { WorkoutPlan } from "../../shared/types";
 import type { AppEnv } from "../env";
-import { dbFrom } from "../lib/helpers";
+import { dbFrom, batchAll, findInaccessibleExerciseIds } from "../lib/helpers";
 import { parseJson } from "../lib/parse";
 import { loadPlan } from "../lib/plans";
 
 export const planRoutes = new Hono<AppEnv>();
 
-async function replacePlanExercises(
-  db: ReturnType<typeof dbFrom>,
-  planId: string,
-  items: Array<{
-    exerciseId: string;
-    targetSets: number;
-    targetReps: string;
-    order: number;
-    restSeconds?: number;
-    suggestedWeight?: number | null;
-  }>,
-) {
-  await db.delete(planExercises).where(eq(planExercises.planId, planId));
-  if (!items.length) return;
-  await db.insert(planExercises).values(
-    items.map((item) => ({
-      id: crypto.randomUUID(),
-      planId,
-      exerciseId: item.exerciseId,
-      targetSets: item.targetSets,
-      targetReps: item.targetReps,
-      order: item.order,
-      restSeconds: item.restSeconds ?? 90,
-      suggestedWeight: item.suggestedWeight ?? null,
-    })),
-  );
+type PlanExerciseInput = {
+  exerciseId: string;
+  targetSets: number;
+  targetReps: string;
+  order: number;
+  restSeconds?: number;
+  suggestedWeight?: number | null;
+};
+
+function planExerciseRows(planId: string, items: PlanExerciseInput[]) {
+  return items.map((item) => ({
+    id: crypto.randomUUID(),
+    planId,
+    exerciseId: item.exerciseId,
+    targetSets: item.targetSets,
+    targetReps: item.targetReps,
+    order: item.order,
+    restSeconds: item.restSeconds ?? 90,
+    suggestedWeight: item.suggestedWeight ?? null,
+  }));
 }
 
 planRoutes.get("/", async (c) => {
@@ -61,16 +55,27 @@ planRoutes.post("/", async (c) => {
   if (!parsed.success) return c.json({ error: parsed.error }, 400);
 
   const db = dbFrom(c);
+  const userId = c.get("userId");
+  const exerciseIds = (parsed.data.exercises ?? []).map((item) => item.exerciseId);
+  const bad = await findInaccessibleExerciseIds(db, userId, exerciseIds);
+  if (bad.length) return c.json({ error: "Unbekannte oder fremde Übung im Plan" }, 400);
+
   const id = crypto.randomUUID();
-  await db.insert(workoutPlans).values({
-    id,
-    userId: c.get("userId"),
-    title: parsed.data.title,
-    description: parsed.data.description ?? null,
-    createdAt: Date.now(),
-  });
-  await replacePlanExercises(db, id, parsed.data.exercises ?? []);
-  const plan = await loadPlan(db, id, c.get("userId"));
+  const rows = planExerciseRows(id, parsed.data.exercises ?? []);
+  const stmts: Parameters<typeof batchAll>[1] = [
+    db.insert(workoutPlans).values({
+      id,
+      userId,
+      title: parsed.data.title,
+      description: parsed.data.description ?? null,
+      createdAt: Date.now(),
+    }),
+  ];
+  for (let i = 0; i < rows.length; i += 10) {
+    stmts.push(db.insert(planExercises).values(rows.slice(i, i + 10)));
+  }
+  await batchAll(db, stmts);
+  const plan = await loadPlan(db, id, userId);
   return c.json({ plan }, 201);
 });
 
@@ -80,22 +85,45 @@ planRoutes.patch("/:id", async (c) => {
 
   const db = dbFrom(c);
   const id = c.req.param("id");
-  const existing = await loadPlan(db, id, c.get("userId"));
+  const userId = c.get("userId");
+  const existing = await loadPlan(db, id, userId);
   if (!existing) return c.json({ error: "Plan nicht gefunden" }, 404);
 
-  await db
-    .update(workoutPlans)
-    .set({
-      ...(parsed.data.title !== undefined ? { title: parsed.data.title } : {}),
-      ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
-    })
-    .where(and(eq(workoutPlans.id, id), eq(workoutPlans.userId, c.get("userId"))));
-
   if (parsed.data.exercises) {
-    await replacePlanExercises(db, id, parsed.data.exercises);
+    const bad = await findInaccessibleExerciseIds(
+      db,
+      userId,
+      parsed.data.exercises.map((item) => item.exerciseId),
+    );
+    if (bad.length) return c.json({ error: "Unbekannte oder fremde Übung im Plan" }, 400);
   }
 
-  return c.json({ plan: await loadPlan(db, id, c.get("userId")) });
+  const update = {
+    ...(parsed.data.title !== undefined ? { title: parsed.data.title } : {}),
+    ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
+  };
+
+  if (parsed.data.exercises) {
+    const rows = planExerciseRows(id, parsed.data.exercises);
+    const stmts: Parameters<typeof batchAll>[1] = [
+      db
+        .update(workoutPlans)
+        .set(update)
+        .where(and(eq(workoutPlans.id, id), eq(workoutPlans.userId, userId))),
+      db.delete(planExercises).where(eq(planExercises.planId, id)),
+    ];
+    for (let i = 0; i < rows.length; i += 10) {
+      stmts.push(db.insert(planExercises).values(rows.slice(i, i + 10)));
+    }
+    await batchAll(db, stmts);
+  } else if (Object.keys(update).length) {
+    await db
+      .update(workoutPlans)
+      .set(update)
+      .where(and(eq(workoutPlans.id, id), eq(workoutPlans.userId, userId)));
+  }
+
+  return c.json({ plan: await loadPlan(db, id, userId) });
 });
 
 planRoutes.delete("/:id", async (c) => {
@@ -103,7 +131,9 @@ planRoutes.delete("/:id", async (c) => {
   const id = c.req.param("id");
   const existing = await loadPlan(db, id, c.get("userId"));
   if (!existing) return c.json({ error: "Plan nicht gefunden" }, 404);
-  await db.delete(planExercises).where(eq(planExercises.planId, id));
-  await db.delete(workoutPlans).where(and(eq(workoutPlans.id, id), eq(workoutPlans.userId, c.get("userId"))));
+  await db.batch([
+    db.delete(planExercises).where(eq(planExercises.planId, id)),
+    db.delete(workoutPlans).where(and(eq(workoutPlans.id, id), eq(workoutPlans.userId, c.get("userId")))),
+  ]);
   return c.json({ ok: true });
 });

@@ -1,25 +1,29 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { PreviousSet, WorkoutSession } from "@shared/types";
 
+export type QueuedRequest = {
+  id: string;
+  method: string;
+  path: string;
+  body: unknown;
+  createdAt: number;
+};
+
+export type DirtySessionEntry = {
+  session: WorkoutSession;
+  previous: PreviousSet[];
+  dirty: boolean;
+  updatedAt: number;
+};
+
 interface FitnessDB extends DBSchema {
   sessions: {
     key: string;
-    value: {
-      session: WorkoutSession;
-      previous: PreviousSet[];
-      dirty: boolean;
-      updatedAt: number;
-    };
+    value: DirtySessionEntry;
   };
   queue: {
     key: string;
-    value: {
-      id: string;
-      method: string;
-      path: string;
-      body: unknown;
-      createdAt: number;
-    };
+    value: QueuedRequest;
   };
 }
 
@@ -51,9 +55,10 @@ export async function loadLocalSession(id: string) {
   return db.get("sessions", id);
 }
 
-export async function loadDirtySessions() {
+export async function loadDirtySessions(): Promise<DirtySessionEntry[]> {
   const db = await getDb();
-  return db.getAll("sessions");
+  const all = await db.getAll("sessions");
+  return all.sort((a, b) => a.updatedAt - b.updatedAt);
 }
 
 export async function clearLocalSession(id: string) {
@@ -68,9 +73,10 @@ export async function enqueueRequest(method: string, path: string, body: unknown
   return id;
 }
 
-export async function readQueue() {
+export async function readQueue(): Promise<QueuedRequest[]> {
   const db = await getDb();
-  return db.getAll("queue");
+  const all = await db.getAll("queue");
+  return all.sort((a, b) => a.createdAt - b.createdAt);
 }
 
 export async function removeQueued(id: string) {

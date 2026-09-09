@@ -1,9 +1,10 @@
-import { createDb } from "../../db/client";
+import { createDb, type Database } from "../../db/client";
 import { exercises, users } from "../../db/schema";
 import type { Exercise, UserProfile } from "../../shared/types";
 import type { AppEnv } from "../env";
 import type { Context } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 
 export function dbFrom(c: Context<AppEnv>) {
   return createDb(c.env.DB);
@@ -64,4 +65,43 @@ export function normalizeName(name: string): string {
 export function estimated1rm(weight: number, reps: number): number {
   if (reps <= 1) return weight;
   return weight * (1 + reps / 30);
+}
+
+/**
+ * Führt heterogene D1-Statements (Insert/Update/Delete verschiedener Tabellen)
+ * in einem atomaren Batch aus. Drizzle verlangt ein nicht-leeres Tupel aus
+ * einem gemeinsamen BatchItem-Typ – deshalb der explizite Sammeltyp.
+ */
+export async function batchAll(db: Database, stmts: BatchItem<"sqlite">[]): Promise<void> {
+  if (!stmts.length) return;
+  await db.batch(stmts as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
+}
+
+/**
+ * Liefert IDs zurück, die weder globale Katalog-Übungen noch eigene
+ * Custom-Übungen des Users sind (unbekannt oder fremd).
+ */
+export async function findInaccessibleExerciseIds(
+  db: Database,
+  userId: string,
+  ids: string[],
+): Promise<string[]> {
+  const unique = [...new Set(ids)];
+  if (!unique.length) return [];
+  const rows = await db
+    .select({ id: exercises.id, userId: exercises.userId, isCustom: exercises.isCustom })
+    .from(exercises)
+    .where(inArray(exercises.id, unique));
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const bad: string[] = [];
+  for (const id of unique) {
+    const row = byId.get(id);
+    if (!row) {
+      bad.push(id);
+      continue;
+    }
+    if (!row.isCustom) continue;
+    if (row.userId !== userId) bad.push(id);
+  }
+  return bad;
 }
