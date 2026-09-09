@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { and, desc, eq } from "drizzle-orm";
-import { planExercises, workoutPlans } from "../../db/schema";
+import { planExercises, workoutLogs, workoutPlans } from "../../db/schema";
 import { planCreateSchema, planUpdateSchema } from "../../shared/schemas";
 import type { WorkoutPlan } from "../../shared/types";
 import type { AppEnv } from "../env";
@@ -132,6 +132,9 @@ planRoutes.delete("/:id", async (c) => {
   const existing = await loadPlan(db, id, c.get("userId"));
   if (!existing) return c.json({ error: "Plan nicht gefunden" }, 404);
   await db.batch([
+    // FK-Constraint: workout_logs.plan_id hat ON DELETE no action.
+    // Referenzen auf null setzen, sonst schlägt das Löschen fehl.
+    db.update(workoutLogs).set({ planId: null }).where(eq(workoutLogs.planId, id)),
     db.delete(planExercises).where(eq(planExercises.planId, id)),
     db.delete(workoutPlans).where(and(eq(workoutPlans.id, id), eq(workoutPlans.userId, c.get("userId")))),
   ]);

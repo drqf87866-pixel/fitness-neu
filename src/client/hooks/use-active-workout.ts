@@ -284,13 +284,18 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
       const prev = previousRef.current;
       const payload = { completedAt: Date.now(), notes: notes ?? current.notes };
       try {
-        await persist(current, prev, navigator.onLine);
         if (navigator.onLine) {
+          await persist(current, prev, true);
           await api(`/api/sessions/${current.id}`, {
             method: "PATCH",
             body: JSON.stringify(payload),
           });
         } else {
+          // Offline: PUT in die Queue legen (enthält die Sätze), dann PATCH.
+          // Erst danach die lokale Kopie löschen – sonst gehen Sätze verloren.
+          await enqueueRequest("PUT", `/api/sessions/${current.id}/sets`, {
+            sets: toSetPayload(current.sets),
+          });
           await enqueueRequest("PATCH", `/api/sessions/${current.id}`, payload);
         }
         await clearLocalSession(current.id);

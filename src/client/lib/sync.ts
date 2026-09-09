@@ -13,7 +13,10 @@ import type { SetLog } from "@shared/types";
 
 /**
  * Statuscodes, bei denen dieselbe Anfrage auch später nie durchgeht:
- * ungültige Payload, Ziel weg, oder Session bereits abgeschlossen (409).
+ * ungültige Payload, oder Session bereits abgeschlossen (409).
+ * 404 auf PUT /sets wird NICHT als permanent behandelt: die Server-Session
+ * könnte zwischenzeitlich gelöscht worden sein, aber die lokalen Sätze
+ * sollen nicht verworfen werden – sie werden als Dead-Letter gesichert.
  * Solche Einträge werden verworfen, statt die Queue dauerhaft zu blockieren.
  */
 function isPermanentFailure(error: unknown): boolean {
@@ -127,8 +130,16 @@ export async function flushOfflineQueue() {
           await saveLocalSession(op.entry.session, op.entry.previous, false);
         } catch (error) {
           if (isPermanentFailure(error)) {
-            // Etwa eine bereits abgeschlossene Session: lokale Kopie aufräumen,
-            // sonst wird sie bei jedem Sync erneut abgelehnt.
+            const status = error instanceof ApiError ? error.status : 0;
+            if (status === 404) {
+              // Server-Session existiert nicht mehr (z. B. auf anderem Gerät
+              // gelöscht). Lokale Kopie NICHT löschen – die Sätze wären sonst
+              // unwiederbringlich verloren. Stattdessen als Dead-Letter sichern.
+              notifyPermanentFailure(`PUT ${path}`, error);
+              continue;
+            }
+            // Andere permanente Fehler (z. B. 409 bereits abgeschlossen):
+            // lokale Kopie aufräumen, sonst wird sie bei jedem Sync abgelehnt.
             await clearLocalSession(op.entry.session.id);
             notifyPermanentFailure(`PUT ${path}`, error);
             continue;

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { and, eq, or } from "drizzle-orm";
-import { exercises } from "../../db/schema";
+import { exercises, planExercises, setLogs } from "../../db/schema";
 import { exerciseCreateSchema, exerciseUpdateSchema } from "../../shared/schemas";
 import type { AppEnv } from "../env";
 import { dbFrom, toExercise } from "../lib/helpers";
@@ -74,6 +74,24 @@ exerciseRoutes.delete("/:id", async (c) => {
   if (!existing) return c.json({ error: "Übung nicht gefunden" }, 404);
   if (!existing.isCustom || existing.userId !== c.get("userId")) {
     return c.json({ error: "Nur eigene Übungen können gelöscht werden" }, 403);
+  }
+  // Referenz-Check: plan_exercises.exercise_id und set_logs.exercise_id haben
+  // ON DELETE no action. Bei Verwendung 409 statt unbehandeltem FK-Fehler.
+  const [planRef] = await db
+    .select({ id: planExercises.id })
+    .from(planExercises)
+    .where(eq(planExercises.exerciseId, id))
+    .limit(1);
+  if (planRef) {
+    return c.json({ error: "Übung wird noch in einem Plan verwendet" }, 409);
+  }
+  const [setRef] = await db
+    .select({ id: setLogs.id })
+    .from(setLogs)
+    .where(eq(setLogs.exerciseId, id))
+    .limit(1);
+  if (setRef) {
+    return c.json({ error: "Übung wurde bereits in Trainings verwendet" }, 409);
   }
   await db.delete(exercises).where(and(eq(exercises.id, id), eq(exercises.userId, c.get("userId"))));
   return c.json({ ok: true });
