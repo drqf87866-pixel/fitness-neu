@@ -68,7 +68,7 @@ export function GeneratePage() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+            className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted"
             onClick={() => {
               setPlan(null);
               setStep("goal");
@@ -131,7 +131,7 @@ export function GeneratePage() {
         {step === "prompt" ? (
           <button
             type="button"
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+            className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted"
             onClick={() => setStep("goal")}
             aria-label="Zurück"
           >

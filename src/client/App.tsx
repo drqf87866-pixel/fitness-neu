@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Navigate, Outlet, RouterProvider, createBrowserRouter } from "react-router";
 import { Toaster } from "sonner";
 import { AppLayout } from "@/components/layout";
+import { ConfirmProvider } from "@/components/ui/confirm";
 import { useAuthQuery } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { AnalyticsPage } from "@/pages/analytics";
@@ -15,6 +16,7 @@ import { PlanDetailPage } from "@/pages/plan-detail";
 import { PlansPage } from "@/pages/plans";
 import { ProfilePage } from "@/pages/profile";
 import { RegisterPage } from "@/pages/register";
+import { SessionDetailPage } from "@/pages/session-detail";
 import { WorkoutPage } from "@/pages/workout";
 
 const queryClient = new QueryClient({
@@ -86,7 +88,9 @@ const router = createBrowserRouter([
           { path: "/plans/generate", element: <GeneratePage /> },
           { path: "/plans/new", element: <CreatePlanPage /> },
           { path: "/plans/:planId", element: <PlanDetailPage /> },
+          { path: "/plans/:planId/edit", element: <CreatePlanPage /> },
           { path: "/history", element: <HistoryPage /> },
+          { path: "/sessions/:id", element: <SessionDetailPage /> },
           { path: "/analytics", element: <AnalyticsPage /> },
           { path: "/profile", element: <ProfilePage /> },
           { path: "/exercises", element: <ExercisesPage /> },
@@ -101,8 +105,12 @@ const router = createBrowserRouter([
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-      <Toaster theme="dark" position="top-center" />
+      <ConfirmProvider>
+        <RouterProvider router={router} />
+        {/* Unten, damit Meldungen nicht den Header verdecken; der Offset hält
+            sie über der Bottom-Navigation. */}
+        <Toaster theme="dark" position="bottom-center" offset={88} />
+      </ConfirmProvider>
     </QueryClientProvider>
   );
 }

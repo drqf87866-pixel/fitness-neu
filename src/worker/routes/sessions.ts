@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { exercises, planExercises, setLogs, workoutLogs, workoutPlans } from "../../db/schema";
 import { patchSessionSchema, startSessionSchema, upsertSetsSchema } from "../../shared/schemas";
-import type { PreviousSet, SetLog, WorkoutSession } from "../../shared/types";
+import type { PreviousSet, SessionSummary, SetLog, WorkoutSession } from "../../shared/types";
 import type { AppEnv } from "../env";
 import { dbFrom } from "../lib/helpers";
 import { parseJson } from "../lib/parse";
@@ -37,12 +37,13 @@ async function loadSession(
     : [];
   const plannedByExercise = new Map<
     string,
-    { restSeconds: number; targetReps: string; suggestedWeight: number | null }
+    { order: number; restSeconds: number; targetReps: string; suggestedWeight: number | null }
   >();
   if (log.planId) {
     const planned = await db.select().from(planExercises).where(eq(planExercises.planId, log.planId));
     for (const item of planned) {
       plannedByExercise.set(item.exerciseId, {
+        order: item.order,
         restSeconds: item.restSeconds,
         targetReps: item.targetReps,
         suggestedWeight: item.suggestedWeight,
@@ -50,17 +51,33 @@ async function loadSession(
     }
   }
 
-  const exerciseMeta = catalog.map((ex) => {
-    const planned = plannedByExercise.get(ex.id);
-    return {
-      exerciseId: ex.id,
-      name: ex.name,
-      primaryMuscle: ex.primaryMuscle,
-      restSeconds: planned?.restSeconds ?? 90,
-      targetReps: planned?.targetReps ?? null,
-      suggestedWeight: planned?.suggestedWeight ?? null,
-    };
+  // Reihenfolge des ersten Satzes je Übung – Grundlage für spontan im Training
+  // ergänzte Übungen, die im Plan nicht vorkommen.
+  const firstSetIndex = new Map<string, number>();
+  sets.forEach((set, index) => {
+    if (!firstSetIndex.has(set.exerciseId)) firstSetIndex.set(set.exerciseId, index);
   });
+
+  // Ohne explizite Sortierung liefert die Katalogabfrage eine beliebige
+  // Reihenfolge – die Übungen erschienen im Training dann nicht in Planreihenfolge.
+  const rank = (exerciseId: string) => {
+    const planned = plannedByExercise.get(exerciseId);
+    return planned ? planned.order : 1_000 + (firstSetIndex.get(exerciseId) ?? 0);
+  };
+
+  const exerciseMeta = catalog
+    .map((ex) => {
+      const planned = plannedByExercise.get(ex.id);
+      return {
+        exerciseId: ex.id,
+        name: ex.name,
+        primaryMuscle: ex.primaryMuscle,
+        restSeconds: planned?.restSeconds ?? 90,
+        targetReps: planned?.targetReps ?? null,
+        suggestedWeight: planned?.suggestedWeight ?? null,
+      };
+    })
+    .sort((a, b) => rank(a.exerciseId) - rank(b.exerciseId));
 
   return {
     id: log.id,
@@ -144,16 +161,34 @@ sessionRoutes.get("/", async (c) => {
     .orderBy(desc(workoutLogs.startedAt))
     .limit(90);
 
+  // Kennzahlen in einer gruppierten Abfrage statt pro Session einzeln.
+  const stats = await db
+    .select({
+      workoutLogId: setLogs.workoutLogId,
+      setCount: sql<number>`count(*)`,
+      volume: sql<number>`coalesce(sum(${setLogs.weight} * ${setLogs.reps}), 0)`,
+    })
+    .from(setLogs)
+    .innerJoin(workoutLogs, eq(setLogs.workoutLogId, workoutLogs.id))
+    .where(and(eq(workoutLogs.userId, userId), eq(setLogs.isCompleted, true)))
+    .groupBy(setLogs.workoutLogId);
+
+  const statsById = new Map(stats.map((row) => [row.workoutLogId, row]));
+
   return c.json({
-    sessions: logs.map((log) => ({
-      id: log.id,
-      userId: log.userId,
-      planId: log.planId,
-      planTitle: log.planTitle ?? null,
-      startedAt: log.startedAt,
-      completedAt: log.completedAt,
-      notes: log.notes,
-    })),
+    sessions: logs.map((log): SessionSummary => {
+      const summary = statsById.get(log.id);
+      return {
+        id: log.id,
+        planId: log.planId,
+        planTitle: log.planTitle ?? null,
+        startedAt: log.startedAt,
+        completedAt: log.completedAt,
+        notes: log.notes,
+        setCount: Number(summary?.setCount ?? 0),
+        volumeKg: Math.round(Number(summary?.volume ?? 0)),
+      };
+    }),
   });
 });
 

@@ -29,18 +29,38 @@ export function RegisterPage() {
       <form className="mt-8 grid gap-4" onSubmit={onSubmit}>
         <Field>
           <Label htmlFor="name">Name</Label>
-          <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
+          <Input
+            id="name"
+            autoComplete="name"
+            className="h-11"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
         </Field>
         <Field>
           <Label htmlFor="email">E-Mail</Label>
-          <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <Input
+            id="email"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            autoCapitalize="none"
+            autoCorrect="off"
+            className="h-11"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
         </Field>
         <Field>
           <Label htmlFor="password">Passwort (min. 8 Zeichen)</Label>
           <Input
             id="password"
             type="password"
+            autoComplete="new-password"
             minLength={8}
+            className="h-11"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required

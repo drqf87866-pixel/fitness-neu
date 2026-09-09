@@ -29,13 +29,26 @@ export function LoginPage() {
       <form className="mt-8 grid gap-4" onSubmit={onSubmit}>
         <Field>
           <Label htmlFor="email">E-Mail</Label>
-          <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <Input
+            id="email"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            autoCapitalize="none"
+            autoCorrect="off"
+            className="h-11"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
         </Field>
         <Field>
           <Label htmlFor="password">Passwort</Label>
           <Input
             id="password"
             type="password"
+            autoComplete="current-password"
+            className="h-11"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required

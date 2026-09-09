@@ -14,3 +14,22 @@ export function formatDay(ts: number) {
     new Date(ts),
   );
 }
+
+/** Kompakte Dauer für Listen und Zusammenfassungen: "48 min", "1 h 12 min". */
+export function formatDuration(ms: number) {
+  const totalMinutes = Math.max(0, Math.round(ms / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours > 0 ? `${hours} h ${minutes} min` : `${minutes} min`;
+}
+
+/** Mitlaufende Trainingsuhr: "12:04", ab einer Stunde "1:12:04". */
+export function formatStopwatch(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const mm = String(minutes).padStart(hours > 0 ? 2 : 1, "0");
+  const ss = String(seconds).padStart(2, "0");
+  return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
+}

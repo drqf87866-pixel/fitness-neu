@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,6 @@ import { useQuery } from "@tanstack/react-query";
 export function PlanDetailPage() {
   const { planId } = useParams();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   const plans = useQuery({
     queryKey: ["plans"],
@@ -60,7 +59,7 @@ export function PlanDetailPage() {
       <div className="flex items-center gap-2">
         <button
           type="button"
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+          className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted"
           onClick={() => navigate("/plans")}
           aria-label="Zurück"
         >

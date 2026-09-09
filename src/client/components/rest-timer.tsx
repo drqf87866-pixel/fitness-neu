@@ -1,16 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Plus, SkipForward } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type Props = {
-  seconds: number;
-  running: boolean;
+  /** Zeitstempel, zu dem die Pause endet. `null` = keine Pause aktiv. */
+  endsAt: number | null;
+  /** Ursprünglich geplante Pausendauer in Sekunden (für den Fortschrittsring). */
+  total: number;
   onDone: () => void;
   onSkip: () => void;
+  onExtend: (deltaSeconds: number) => void;
 };
 
 function beep() {
   try {
     const ctx = new AudioContext();
+    void ctx.resume().catch(() => {});
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.frequency.value = 880;
@@ -19,75 +24,108 @@ function beep() {
     gain.connect(ctx.destination);
     osc.start();
     osc.stop(ctx.currentTime + 0.2);
+    // Kontext wieder freigeben – sonst sammelt sich pro Satz einer an.
+    osc.onended = () => void ctx.close().catch(() => {});
   } catch {
     /* ignore */
   }
 }
 
-async function notify(title: string, body: string) {
-  if (!("Notification" in window)) return;
-  if (Notification.permission === "default") {
-    await Notification.requestPermission();
-  }
-  if (Notification.permission === "granted") {
-    new Notification(title, { body });
-  }
+function notify(title: string, body: string) {
   navigator.vibrate?.([200, 80, 200]);
+  try {
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification(title, { body });
+    }
+  } catch {
+    /* Safari wirft hier in manchen Standalone-Kontexten */
+  }
 }
 
-export function RestTimer({ seconds, running, onDone, onSkip }: Props) {
-  const [left, setLeft] = useState(seconds);
-  const done = useRef(false);
+export function RestTimer({ endsAt, total, onDone, onSkip, onExtend }: Props) {
+  const [now, setNow] = useState(() => Date.now());
+  const firedFor = useRef<number | null>(null);
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+
+  // Die Anzeige wird aus der Deadline berechnet, nicht heruntergezählt. Damit
+  // stimmt sie auch, wenn der Browser das Intervall bei gesperrtem Display
+  // drosselt oder ganz anhält.
+  useEffect(() => {
+    if (endsAt === null) return;
+    const tick = () => setNow(Date.now());
+    tick();
+    const id = window.setInterval(tick, 250);
+    document.addEventListener("visibilitychange", tick);
+    window.addEventListener("focus", tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+      window.removeEventListener("focus", tick);
+    };
+  }, [endsAt]);
 
   useEffect(() => {
-    setLeft(seconds);
-    done.current = false;
-  }, [seconds, running]);
+    if (endsAt === null || now < endsAt || firedFor.current === endsAt) return;
+    firedFor.current = endsAt;
+    beep();
+    notify("Pause vorbei", "Weiter mit dem nächsten Satz.");
+    onDoneRef.current();
+  }, [endsAt, now]);
 
-  useEffect(() => {
-    if (!running) return;
-    const id = window.setInterval(() => {
-      setLeft((value) => {
-        if (value <= 1) {
-          if (!done.current) {
-            done.current = true;
-            beep();
-            void notify("Pause vorbei", "Nächster Satz.");
-            onDone();
-          }
-          return 0;
-        }
-        return value - 1;
-      });
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [running, onDone]);
+  if (endsAt === null) return null;
 
-  if (!running) return null;
-
-  const mm = String(Math.floor(left / 60)).padStart(2, "0");
-  const ss = String(left % 60).padStart(2, "0");
-  const fraction = left / seconds;
+  const leftSeconds = Math.max(0, Math.ceil((endsAt - now) / 1000));
+  const mm = String(Math.floor(leftSeconds / 60)).padStart(2, "0");
+  const ss = String(leftSeconds % 60).padStart(2, "0");
+  const fraction = total > 0 ? Math.min(1, Math.max(0, leftSeconds / total)) : 0;
+  const almostDone = leftSeconds <= 10;
 
   return (
-    <div className="fixed inset-x-0 bottom-16 z-40 mx-auto w-[min(92%,28rem)] rounded-2xl border border-orange-500/40 bg-card/95 p-4 pb-safe backdrop-blur">
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">Pause</p>
-      <div className="mt-1 flex items-end justify-between">
-        <div>
-          <p className="text-4xl font-semibold tabular-nums">
+    <div
+      className={cn(
+        "mb-2 flex items-center gap-3 rounded-2xl border bg-card/95 p-3 backdrop-blur transition-colors",
+        almostDone ? "border-orange-500/70" : "border-orange-500/30",
+      )}
+      role="timer"
+      aria-live="off"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Pause</p>
+          <p
+            className={cn(
+              "text-2xl font-semibold tabular-nums transition-colors",
+              almostDone && "text-orange-400",
+            )}
+          >
             {mm}:{ss}
           </p>
-          <div className="mt-1.5 h-1 w-32 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-1000"
-              style={{ width: `${fraction * 100}%` }}
-            />
-          </div>
         </div>
-        <Button variant="secondary" onClick={onSkip}>
-          Überspringen
-        </Button>
+        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-primary transition-[width] duration-200 ease-linear"
+            style={{ width: `${fraction * 100}%` }}
+          />
+        </div>
       </div>
+      <button
+        type="button"
+        onClick={() => onExtend(30)}
+        aria-label="Pause um 30 Sekunden verlängern"
+        className="flex h-11 shrink-0 items-center gap-0.5 rounded-lg bg-muted px-3 text-sm font-medium tabular-nums transition-colors active:bg-neutral-800"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        30s
+      </button>
+      <button
+        type="button"
+        onClick={onSkip}
+        aria-label="Pause überspringen"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-muted transition-colors active:bg-neutral-800"
+      >
+        <SkipForward className="h-4 w-4" />
+      </button>
     </div>
   );
 }

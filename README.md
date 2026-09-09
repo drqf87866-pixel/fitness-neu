@@ -12,6 +12,7 @@ Fitness-Tracker als installierbare Progressive Web App mit React-Frontend, Hono-
 - Trainingspläne erstellen, bearbeiten und verwalten
 - Aktive Workouts mit Satzprotokollierung und Rest-Timer
 - Offline-First-Unterstützung für aktive Workouts über IndexedDB und PWA-Caching
+- Installierbar auf iOS und Android inklusive Home-Bildschirm-Icons
 - Übungskatalog mit benutzerdefinierten Übungen
 - Trainingsverlauf und Volumen-Analytics
 - KI-Trainingsplan-Generator über Gemini `gemini-3.5-flash-lite`
@@ -107,6 +108,16 @@ Erwartete Antwort:
 
 Fehlt `GEMINI_API_KEY` oder schlägt die Gemini-Anfrage fehl, erzeugt `/api/ai/generate-plan` einen Plan aus dem Übungskatalog und liefert `usedFallback: true` zurück.
 
+## PWA-Icons
+
+Die Icons in `public/` (`icon-192.png`, `icon-512.png`, `icon-512-maskable.png`, `apple-touch-icon.png`) werden aus der Geometrie von `public/favicon.svg` erzeugt:
+
+```bash
+python scripts/generate-icons.py
+```
+
+Das Manifest wird von `vite-plugin-pwa` aus `vite.config.ts` generiert. Eine zusätzliche statische `public/manifest.webmanifest` darf es nicht geben, sie würde mit der generierten Datei kollidieren.
+
 ## Datenbankänderungen
 
 1. `src/db/schema.ts` ändern.
@@ -136,7 +147,8 @@ Migrationen liegen in `drizzle/migrations/` und sollten nicht manuell bearbeitet
 | --- | --- |
 | `pnpm install` | Abhängigkeiten installieren |
 | `pnpm dev` | Vite und Cloudflare Workerd lokal starten |
-| `pnpm build` | Produktions-Build erzeugen |
+| `pnpm build` | Produktions-Build erzeugen (ohne Typprüfung) |
+| `pnpm typecheck` | TypeScript prüfen (`tsc --noEmit`) |
 | `pnpm preview` | Produktions-Build lokal anzeigen |
 | `pnpm db:generate` | Drizzle-Migration erzeugen |
 | `pnpm db:migrate:local` | Migration auf lokaler D1 anwenden |
@@ -148,4 +160,9 @@ Migrationen liegen in `drizzle/migrations/` und sollten nicht manuell bearbeitet
 
 ## Qualitätssicherung
 
-Das Projekt enthält aktuell keinen konfigurierten Test Runner, Linter oder Formatter. Vor einem Deployment sollte mindestens ein Produktions-Build mit `pnpm build` erfolgreich durchlaufen.
+Das Projekt enthält keinen Test Runner, Linter oder Formatter. `pnpm build` führt ausschließlich `vite build` aus und prüft **keine** Typen. Vor einem Deployment sollten daher beide Befehle durchlaufen:
+
+```bash
+pnpm typecheck
+pnpm build
+```

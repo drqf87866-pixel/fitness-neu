@@ -76,6 +76,20 @@ export type WorkoutSession = {
   }>;
 };
 
+/** Kompakte Kennzahlen einer Session für die Verlaufsliste. */
+export type SessionSummary = {
+  id: string;
+  planId: string | null;
+  planTitle: string | null;
+  startedAt: number;
+  completedAt: number | null;
+  notes: string | null;
+  /** Anzahl abgeschlossener Sätze. */
+  setCount: number;
+  /** Volumen der abgeschlossenen Sätze in kg. */
+  volumeKg: number;
+};
+
 export type PreviousSet = {
   exerciseId: string;
   setNumber: number;

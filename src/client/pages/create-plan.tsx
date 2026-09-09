@@ -1,106 +1,102 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { useNavigate } from "react-router";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router";
+import { ArrowLeft, ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { ExercisePicker } from "@/components/exercise-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { StepperInput } from "@/components/ui/stepper-input";
 import { api } from "@/lib/api";
-import { muscleLabel, EQUIPMENT_TAGS, MOVEMENT_TAGS } from "@/lib/labels";
-import type { Exercise, WorkoutPlan } from "@shared/types";
-import { toast } from "sonner";
+import { muscleLabel } from "@/lib/labels";
+import { getExerciseThumbnail } from "@/lib/exercise-images";
+import type { WorkoutPlan } from "@shared/types";
 
 type DraftItem = {
   exerciseId: string;
+  name: string;
+  primaryMuscle: string;
   targetSets: number;
   targetReps: string;
 };
 
-type EquipmentTag = "Maschine" | "Freihantel" | "Anderes";
-type MovementTag = "Push" | "Pull" | "Legs" | "Anderes";
-
-const EQUIPMENT_FILTER_OPTIONS: EquipmentTag[] = ["Maschine", "Freihantel", "Anderes"];
-const MOVEMENT_FILTER_OPTIONS: MovementTag[] = ["Push", "Pull", "Legs", "Anderes"];
-
+/** Dieselbe Seite erstellt und bearbeitet Pläne – der Übungs-Picker ist ein
+ *  Sheet und ließe sich in einem Dialog nicht sauber verschachteln. */
 export function CreatePlanPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { planId } = useParams();
+  const isEdit = Boolean(planId);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [items, setItems] = useState<DraftItem[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
-  const [regionFilter, setRegionFilter] = useState<string | null>(null);
-  const [equipmentFilter, setEquipmentFilter] = useState<EquipmentTag | null>(null);
-  const [movementFilter, setMovementFilter] = useState<MovementTag | null>(null);
-
-  const exercisesQuery = useQuery({
-    queryKey: ["exercises"],
-    queryFn: () => api<{ exercises: Exercise[] }>("/api/exercises"),
+  const plans = useQuery({
+    queryKey: ["plans"],
+    queryFn: () => api<{ plans: WorkoutPlan[] }>("/api/plans"),
+    enabled: isEdit,
   });
-  const catalog = exercisesQuery.data?.exercises ?? [];
+  const existing = plans.data?.plans.find((plan) => plan.id === planId) ?? null;
 
-  const filteredExercises = catalog.filter((exercise) => {
-    if (regionFilter && exercise.primaryMuscle !== regionFilter) return false;
-    if (equipmentFilter) {
-      const tag = EQUIPMENT_TAGS[exercise.equipment] ?? exercise.equipment;
-      if (tag !== equipmentFilter) return false;
-    }
-    if (movementFilter) {
-      const tag = MOVEMENT_TAGS[exercise.category] ?? exercise.category;
-      if (tag !== movementFilter) return false;
-    }
-    return true;
-  });
+  // Formular einmalig aus dem geladenen Plan befüllen, danach gewinnt die Eingabe.
+  useEffect(() => {
+    if (!isEdit || loaded || !existing) return;
+    setTitle(existing.title);
+    setDescription(existing.description ?? "");
+    setItems(
+      [...existing.exercises]
+        .sort((a, b) => a.order - b.order)
+        .map((exercise) => ({
+          exerciseId: exercise.exerciseId,
+          name: exercise.exerciseName,
+          primaryMuscle: exercise.primaryMuscle,
+          targetSets: exercise.targetSets,
+          targetReps: exercise.targetReps,
+        })),
+    );
+    setLoaded(true);
+  }, [isEdit, loaded, existing]);
 
-  const regions = [...new Set(catalog.map((e) => e.primaryMuscle))].sort();
-
-  function toggleExercise(exerciseId: string) {
-    setItems((prev) => {
-      const existingIndex = prev.findIndex((item) => item.exerciseId === exerciseId);
-      if (existingIndex >= 0) {
-        return prev.filter((_, i) => i !== existingIndex);
-      }
-      return [
-        ...prev,
-        { exerciseId, targetSets: 3, targetReps: "8-12" },
-      ];
-    });
-  }
-
-  function updateItem(exerciseId: string, field: "targetSets" | "targetReps", value: number | string) {
-    setItems((prev) =>
-      prev.map((item) =>
-        item.exerciseId === exerciseId ? { ...item, [field]: value } : item,
-      ),
+  function updateItem(exerciseId: string, patch: Partial<DraftItem>) {
+    setItems((current) =>
+      current.map((item) => (item.exerciseId === exerciseId ? { ...item, ...patch } : item)),
     );
   }
 
-  function moveItem(fromIndex: number, direction: -1 | 1) {
-    setItems((prev) => {
-      const toIndex = fromIndex + direction;
-      if (toIndex < 0 || toIndex >= prev.length) return prev;
-      const next = [...prev];
-      [next[fromIndex], next[toIndex]] = [next[toIndex], next[fromIndex]];
+  function moveItem(index: number, direction: -1 | 1) {
+    setItems((current) => {
+      const target = index + direction;
+      if (target < 0 || target >= current.length) return current;
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
   }
 
   const save = useMutation({
-    mutationFn: () => {
-      const body = JSON.stringify({
-        title: title.trim(),
-        description: description.trim() || null,
-        exercises: items.map((item, index) => ({ ...item, order: index })),
-      });
-      return api<{ plan: WorkoutPlan }>("/api/plans", { method: "POST", body });
-    },
+    mutationFn: () =>
+      api<{ plan: WorkoutPlan }>(isEdit ? `/api/plans/${planId}` : "/api/plans", {
+        method: isEdit ? "PATCH" : "POST",
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim() || null,
+          exercises: items.map((item, index) => ({
+            exerciseId: item.exerciseId,
+            targetSets: item.targetSets,
+            targetReps: item.targetReps,
+            order: index,
+          })),
+        }),
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["plans"] });
-      toast.success("Plan erstellt");
+      toast.success(isEdit ? "Plan gespeichert" : "Plan erstellt");
       navigate("/plans");
     },
     onError: (error) => toast.error(error.message),
@@ -109,220 +105,180 @@ export function CreatePlanPage() {
   const canSave =
     title.trim().length > 0 &&
     items.length > 0 &&
-    items.every((item) => item.exerciseId && item.targetReps.trim().length > 0) &&
+    items.every((item) => item.targetReps.trim().length > 0) &&
     !save.isPending;
 
   return (
-    <div className="grid gap-4">
-      {/* Header */}
-      <div className="flex items-center gap-2">
+    <div className="grid gap-4 pb-24">
+      <div className="flex items-center gap-1">
         <button
           type="button"
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+          className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           onClick={() => navigate("/plans")}
           aria-label="Zurück"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <h2 className="text-xl font-semibold">Plan erstellen</h2>
+        <h2 className="text-xl font-semibold">{isEdit ? "Plan bearbeiten" : "Plan erstellen"}</h2>
       </div>
 
-      {/* Name + Beschreibung */}
       <div className="grid gap-3">
-        <div className="grid gap-1">
-          <Label>Name</Label>
+        <div className="grid gap-1.5">
+          <Label htmlFor="plan-title">Name</Label>
           <Input
+            id="plan-title"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(event) => setTitle(event.target.value)}
             placeholder="z. B. Oberkörper Kraft"
           />
         </div>
-        <div className="grid gap-1">
-          <Label>Beschreibung (optional)</Label>
+        <div className="grid gap-1.5">
+          <Label htmlFor="plan-description">Beschreibung (optional)</Label>
           <Textarea
+            id="plan-description"
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(event) => setDescription(event.target.value)}
             placeholder="Kurze Beschreibung des Ziels"
             className="min-h-16"
           />
         </div>
       </div>
 
-      {/* Filter */}
-      <Card compact className="grid gap-3">
-        <Label>Filter</Label>
-
-        <div className="grid gap-1">
-          <Label className="text-xs text-muted-foreground">Körperregion</Label>
-          <div className="flex flex-wrap gap-1">
-            {regions.map((region) => (
-              <Badge
-                key={region}
-                variant={regionFilter === region ? "default" : "outline"}
-                className="cursor-pointer"
-                onClick={() => setRegionFilter(regionFilter === region ? null : region)}
-              >
-                {muscleLabel(region)}
-              </Badge>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid gap-1">
-          <Label className="text-xs text-muted-foreground">Equipment</Label>
-          <div className="flex flex-wrap gap-1">
-            {EQUIPMENT_FILTER_OPTIONS.map((tag) => (
-              <Badge
-                key={tag}
-                variant={equipmentFilter === tag ? "default" : "outline"}
-                className="cursor-pointer"
-                onClick={() => setEquipmentFilter(equipmentFilter === tag ? null : tag)}
-              >
-                {tag}
-              </Badge>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid gap-1">
-          <Label className="text-xs text-muted-foreground">Bewegung</Label>
-          <div className="flex flex-wrap gap-1">
-            {MOVEMENT_FILTER_OPTIONS.map((tag) => (
-              <Badge
-                key={tag}
-                variant={movementFilter === tag ? "default" : "outline"}
-                className="cursor-pointer"
-                onClick={() => setMovementFilter(movementFilter === tag ? null : tag)}
-              >
-                {tag}
-              </Badge>
-            ))}
-          </div>
-        </div>
-      </Card>
-
-      {/* Übungen */}
       <div className="grid gap-2">
-        <Label>Übungen ({filteredExercises.length})</Label>
-        {filteredExercises.map((exercise) => {
-          const isSelected = items.some((item) => item.exerciseId === exercise.id);
-          return (
-            <Card
-              key={exercise.id}
-              compact
-              className={`flex cursor-pointer items-center justify-between gap-3 ${
-                isSelected ? "border-orange-500/50 bg-orange-500/10" : ""
-              }`}
-              onClick={() => toggleExercise(exercise.id)}
-            >
-              <div className="min-w-0 flex-1">
-                <CardTitle className="text-sm">{exercise.name}</CardTitle>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  <Badge variant="outline" className="text-[10px]">
-                    {muscleLabel(exercise.primaryMuscle)}
-                  </Badge>
-                  <Badge variant="outline" className="text-[10px]">
-                    {EQUIPMENT_TAGS[exercise.equipment] ?? exercise.equipment}
-                  </Badge>
-                  <Badge variant="outline" className="text-[10px]">
-                    {MOVEMENT_TAGS[exercise.category] ?? exercise.category}
-                  </Badge>
-                </div>
-              </div>
-              <div
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-medium ${
-                  isSelected
-                    ? "bg-orange-500 text-white"
-                    : "bg-muted text-muted-foreground"
-                }`}
-              >
-                {isSelected ? "✓" : "+"}
-              </div>
-            </Card>
-          );
-        })}
-        {filteredExercises.length === 0 && (
-          <p className="py-4 text-center text-sm text-muted-foreground">
-            Keine Übungen für diese Filter.
-          </p>
-        )}
-      </div>
+        <div className="flex items-center justify-between">
+          <Label>Übungen {items.length > 0 ? `(${items.length})` : ""}</Label>
+          {items.length > 0 ? (
+            <Button variant="secondary" onClick={() => setPickerOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Hinzufügen
+            </Button>
+          ) : null}
+        </div>
 
-      {/* Ausgewählte Übungen */}
-      {items.length > 0 && (
-        <div className="grid gap-2">
-          <Label>Ausgewählte Übungen ({items.length})</Label>
-          {items.map((item, index) => {
-            const exercise = catalog.find((e) => e.id === item.exerciseId);
+        {items.length === 0 ? (
+          <Card className="grid gap-3 py-8 text-center">
+            <CardTitle>Noch keine Übungen</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Suche im Katalog und stelle deinen Plan zusammen.
+            </p>
+            <Button className="mt-1" onClick={() => setPickerOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Übungen auswählen
+            </Button>
+          </Card>
+        ) : (
+          items.map((item, index) => {
+            const thumb = getExerciseThumbnail(item.exerciseId);
             return (
-              <Card key={item.exerciseId} compact className="grid gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {index + 1}. {exercise?.name ?? "Unbekannt"}
-                  </span>
-                  <div className="flex items-center gap-1">
+              <Card key={item.exerciseId} compact className="grid gap-3">
+                <div className="flex items-center gap-2">
+                  {thumb ? (
+                    <img
+                      src={thumb}
+                      alt=""
+                      className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                      loading="lazy"
+                    />
+                  ) : null}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">
+                      {index + 1}. {item.name}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {muscleLabel(item.primaryMuscle)}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center">
                     <button
                       type="button"
-                      className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted disabled:opacity-40"
+                      className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted disabled:opacity-30"
                       onClick={() => moveItem(index, -1)}
                       disabled={index === 0}
-                      aria-label="Nach oben"
+                      aria-label={`${item.name} nach oben`}
                     >
-                      ↑
+                      <ChevronUp className="h-4 w-4" />
                     </button>
                     <button
                       type="button"
-                      className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted disabled:opacity-40"
+                      className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted disabled:opacity-30"
                       onClick={() => moveItem(index, 1)}
                       disabled={index === items.length - 1}
-                      aria-label="Nach unten"
+                      aria-label={`${item.name} nach unten`}
                     >
-                      ↓
+                      <ChevronDown className="h-4 w-4" />
                     </button>
                     <button
                       type="button"
-                      className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
-                      onClick={() => toggleExercise(item.exerciseId)}
-                      aria-label="Entfernen"
+                      className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted"
+                      onClick={() =>
+                        setItems((current) =>
+                          current.filter((entry) => entry.exerciseId !== item.exerciseId),
+                        )
+                      }
+                      aria-label={`${item.name} entfernen`}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="grid gap-1">
                     <Label className="text-xs">Sätze</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={20}
+                    <StepperInput
                       value={item.targetSets}
-                      onChange={(e) =>
-                        updateItem(item.exerciseId, "targetSets", Number(e.target.value))
-                      }
+                      onCommit={(next) => updateItem(item.exerciseId, { targetSets: next })}
+                      min={1}
+                      max={30}
+                      ariaLabel={`Sätze für ${item.name}`}
                     />
                   </div>
                   <div className="grid gap-1">
-                    <Label className="text-xs">Wiederholungen</Label>
+                    <Label className="text-xs" htmlFor={`reps-${item.exerciseId}`}>
+                      Wiederholungen
+                    </Label>
                     <Input
+                      id={`reps-${item.exerciseId}`}
                       value={item.targetReps}
                       placeholder="8-12"
-                      onChange={(e) =>
-                        updateItem(item.exerciseId, "targetReps", e.target.value)
+                      className="h-11"
+                      onChange={(event) =>
+                        updateItem(item.exerciseId, { targetReps: event.target.value })
                       }
                     />
                   </div>
                 </div>
               </Card>
             );
-          })}
-        </div>
-      )}
+          })
+        )}
+      </div>
 
-      {/* Speichern */}
-      <Button disabled={!canSave} className="w-full" onClick={() => save.mutate()}>
-        {save.isPending ? "Speichern…" : "Plan erstellen"}
+      <Button
+        size="lg"
+        disabled={!canSave}
+        className="w-full"
+        onClick={() => save.mutate()}
+      >
+        {save.isPending ? "Speichern…" : isEdit ? "Plan speichern" : "Plan erstellen"}
       </Button>
+
+      <ExercisePicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        existingIds={items.map((item) => item.exerciseId)}
+        onConfirm={(exercises) =>
+          setItems((current) => [
+            ...current,
+            ...exercises.map((exercise) => ({
+              exerciseId: exercise.id,
+              name: exercise.name,
+              primaryMuscle: exercise.primaryMuscle,
+              targetSets: 3,
+              targetReps: "8-12",
+            })),
+          ])
+        }
+      />
     </div>
   );
 }

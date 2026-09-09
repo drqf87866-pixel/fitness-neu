@@ -1,8 +1,9 @@
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { rateLimits } from "../../db/schema";
+import type { dbFrom } from "./helpers";
 
 export async function consumeRateLimit(
-  db: D1Database,
+  db: ReturnType<typeof dbFrom>,
   key: string,
   limit: number,
   windowSec: number,

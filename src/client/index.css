@@ -39,6 +39,8 @@ body {
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans);
+  /* Kein Gummiband-Scrollen über die Seitenränder hinaus (PWA fühlt sich sonst wie eine Website an) */
+  overscroll-behavior-y: none;
 }
 
 button,
@@ -52,6 +54,31 @@ select {
   min-height: 100dvh;
 }
 
+/* Kein blauer Tap-Blitz und keine 300ms-Verzögerung auf Touch-Geräten */
+a,
+button,
+input,
+select,
+textarea,
+[role="button"],
+[role="tab"] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Number-Spinner verstecken: auf Mobil unbrauchbar klein, am Desktop verstellen
+   sie Werte beim Scrollen. Wir liefern eigene Stepper-Buttons. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Safe-Area-Helfer für Notch und Home-Indicator (viewport-fit=cover) */
 .pb-safe {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
 }
@@ -75,4 +102,53 @@ select {
 .touch-target {
   min-height: 44px;
   min-width: 44px;
+}
+
+/* Horizontale Filterleisten: ohne sichtbare Scrollbar, mit Snap */
+.scroll-x {
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+/* Body-Scroll-Lock, solange ein Sheet offen ist */
+body[data-sheet-open="true"] {
+  overflow: hidden;
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-sheet-in {
+  animation: sheet-in 220ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.animate-fade-in {
+  animation: fade-in 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-sheet-in,
+  .animate-fade-in {
+    animation: none;
+  }
 }

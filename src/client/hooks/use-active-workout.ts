@@ -7,14 +7,29 @@ import {
   loadLocalSession,
   saveLocalSession,
 } from "@/lib/db";
+import { useOnline } from "@/hooks/use-online";
 import { displayToKg } from "@/lib/units";
 import type { PreviousSet, SetLog, Unit, WorkoutSession } from "@shared/types";
+
+const DEFAULT_REST_SECONDS = 90;
+const DEFAULT_SETS_PER_ADDED_EXERCISE = 3;
+/** setLogInputSchema begrenzt setNumber auf 30 – darüber lehnt der Server den PUT ab. */
+export const MAX_SETS_PER_EXERCISE = 30;
+
+export type RestState = { endsAt: number | null; total: number };
+
+export type AddableExercise = {
+  exerciseId: string;
+  name: string;
+  primaryMuscle: string;
+};
 
 export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [previous, setPrevious] = useState<PreviousSet[]>([]);
-  const [rest, setRest] = useState({ running: false, seconds: 90 });
-  const [offline, setOffline] = useState(!navigator.onLine);
+  const [rest, setRest] = useState<RestState>({ endsAt: null, total: DEFAULT_REST_SECONDS });
+  const [loadFailed, setLoadFailed] = useState(false);
+  const online = useOnline();
   const timer = useRef<number | null>(null);
 
   const persist = useCallback(
@@ -44,19 +59,9 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
   );
 
   useEffect(() => {
-    const on = () => setOffline(false);
-    const off = () => setOffline(true);
-    window.addEventListener("online", on);
-    window.addEventListener("offline", off);
-    return () => {
-      window.removeEventListener("online", on);
-      window.removeEventListener("offline", off);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
+    setLoadFailed(false);
     (async () => {
       const local = await loadLocalSession(sessionId);
       if (local && !cancelled) {
@@ -72,7 +77,11 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
         setPrevious(prevRes.previous);
         await saveLocalSession(merged, prevRes.previous, Boolean(local?.dirty));
       } catch {
-        if (!local) toast.error("Session konnte nicht geladen werden");
+        if (cancelled) return;
+        if (!local) {
+          setLoadFailed(true);
+          toast.error("Session konnte nicht geladen werden");
+        }
       }
     })();
     return () => {
@@ -90,51 +99,173 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
     [persist],
   );
 
-  const updateSet = useCallback(
-    (setId: string, patch: Partial<Pick<SetLog, "weight" | "reps" | "isCompleted">>, displayWeight?: boolean) => {
+  /** Gemeinsamer Pfad für alle Satz-Mutationen: State setzen und gepuffert speichern. */
+  const mutateSession = useCallback(
+    (update: (current: WorkoutSession) => WorkoutSession) => {
       setSession((current) => {
         if (!current) return current;
-        const next: WorkoutSession = {
-          ...current,
-          sets: current.sets.map((set) => {
-            if (set.id !== setId) return set;
-            const weight =
-              patch.weight === undefined
-                ? set.weight
-                : displayWeight
-                  ? displayToKg(patch.weight, unit)
-                  : patch.weight;
-            return { ...set, ...patch, weight };
-          }),
-        };
-        schedulePersist(next, previous);
-        return next;
-      });
-    },
-    [previous, schedulePersist, unit],
-  );
-
-  const toggleSet = useCallback(
-    (setId: string) => {
-      setSession((current) => {
-        if (!current) return current;
-        const target = current.sets.find((set) => set.id === setId);
-        const nextCompleted = !target?.isCompleted;
-        const next: WorkoutSession = {
-          ...current,
-          sets: current.sets.map((set) =>
-            set.id === setId ? { ...set, isCompleted: nextCompleted } : set,
-          ),
-        };
-        if (nextCompleted && target) {
-          const meta = current.exercises.find((ex) => ex.exerciseId === target.exerciseId);
-          setRest({ running: true, seconds: meta?.restSeconds ?? 90 });
-        }
+        const next = update(current);
+        if (next === current) return current;
         schedulePersist(next, previous);
         return next;
       });
     },
     [previous, schedulePersist],
+  );
+
+  const updateSet = useCallback(
+    (
+      setId: string,
+      patch: Partial<Pick<SetLog, "weight" | "reps" | "isCompleted">>,
+      displayWeight?: boolean,
+    ) => {
+      mutateSession((current) => ({
+        ...current,
+        sets: current.sets.map((set) => {
+          if (set.id !== setId) return set;
+          const weight =
+            patch.weight === undefined
+              ? set.weight
+              : displayWeight
+                ? displayToKg(patch.weight, unit)
+                : patch.weight;
+          return { ...set, ...patch, weight };
+        }),
+      }));
+    },
+    [mutateSession, unit],
+  );
+
+  const startRest = useCallback((seconds: number) => {
+    // Neue Deadline bei jedem Start: identische Pausendauern starten dadurch
+    // zuverlässig neu, auch wenn die vorherige Pause noch lief.
+    setRest({ endsAt: Date.now() + seconds * 1000, total: seconds });
+  }, []);
+
+  const stopRest = useCallback(() => {
+    setRest((current) => (current.endsAt === null ? current : { ...current, endsAt: null }));
+  }, []);
+
+  const extendRest = useCallback((deltaSeconds: number) => {
+    setRest((current) =>
+      current.endsAt === null
+        ? current
+        : { endsAt: current.endsAt + deltaSeconds * 1000, total: current.total + deltaSeconds },
+    );
+  }, []);
+
+  const toggleSet = useCallback(
+    (setId: string) => {
+      // Bewusst aus dem aktuellen State gelesen und nicht im setState-Updater:
+      // dessen Rückgabe steht erst beim nächsten Render fest, die Pause muss
+      // aber sofort beim Tippen starten.
+      const target = session?.sets.find((set) => set.id === setId);
+      if (!target) return;
+      const nextCompleted = !target.isCompleted;
+
+      mutateSession((current) => ({
+        ...current,
+        sets: current.sets.map((set) =>
+          set.id === setId ? { ...set, isCompleted: nextCompleted } : set,
+        ),
+      }));
+
+      if (!nextCompleted) return;
+      const meta = session?.exercises.find((ex) => ex.exerciseId === target.exerciseId);
+      navigator.vibrate?.(40);
+      startRest(meta?.restSeconds ?? DEFAULT_REST_SECONDS);
+    },
+    [session, mutateSession, startRest],
+  );
+
+  const addSet = useCallback(
+    (exerciseId: string) => {
+      mutateSession((current) => {
+        const ofExercise = current.sets.filter((set) => set.exerciseId === exerciseId);
+        if (ofExercise.length >= MAX_SETS_PER_EXERCISE) return current;
+        const last = ofExercise[ofExercise.length - 1];
+        const setNumber = ofExercise.reduce((max, set) => Math.max(max, set.setNumber), 0) + 1;
+        const added: SetLog = {
+          id: crypto.randomUUID(),
+          workoutLogId: current.id,
+          exerciseId,
+          setNumber,
+          // Startwerte vom letzten Satz übernehmen: im Gym fast immer richtig.
+          weight: last?.weight ?? 0,
+          reps: last?.reps ?? 8,
+          isCompleted: false,
+        };
+        return { ...current, sets: [...current.sets, added] };
+      });
+    },
+    [mutateSession],
+  );
+
+  const removeSet = useCallback(
+    (setId: string) => {
+      mutateSession((current) => {
+        const target = current.sets.find((set) => set.id === setId);
+        if (!target) return current;
+        const remaining = current.sets.filter((set) => set.id !== setId);
+        // Satznummern der betroffenen Übung wieder lückenlos machen.
+        let counter = 0;
+        const renumbered = remaining.map((set) => {
+          if (set.exerciseId !== target.exerciseId) return set;
+          counter += 1;
+          return set.setNumber === counter ? set : { ...set, setNumber: counter };
+        });
+        const stillUsed = renumbered.some((set) => set.exerciseId === target.exerciseId);
+        return {
+          ...current,
+          sets: renumbered,
+          exercises: stillUsed
+            ? current.exercises
+            : current.exercises.filter((ex) => ex.exerciseId !== target.exerciseId),
+        };
+      });
+    },
+    [mutateSession],
+  );
+
+  const addExercises = useCallback(
+    (toAdd: AddableExercise[]) => {
+      if (!toAdd.length) return;
+      mutateSession((current) => {
+        const known = new Set(current.exercises.map((ex) => ex.exerciseId));
+        const fresh = toAdd.filter((ex) => !known.has(ex.exerciseId));
+        if (!fresh.length) return current;
+        const newSets = fresh.flatMap((ex) =>
+          Array.from(
+            { length: DEFAULT_SETS_PER_ADDED_EXERCISE },
+            (_, index): SetLog => ({
+              id: crypto.randomUUID(),
+              workoutLogId: current.id,
+              exerciseId: ex.exerciseId,
+              setNumber: index + 1,
+              weight: 0,
+              reps: 8,
+              isCompleted: false,
+            }),
+          ),
+        );
+        return {
+          ...current,
+          exercises: [
+            ...current.exercises,
+            ...fresh.map((ex) => ({
+              exerciseId: ex.exerciseId,
+              name: ex.name,
+              primaryMuscle: ex.primaryMuscle,
+              restSeconds: DEFAULT_REST_SECONDS,
+              targetReps: null,
+              suggestedWeight: null,
+            })),
+          ],
+          sets: [...current.sets, ...newSets],
+        };
+      });
+    },
+    [mutateSession],
   );
 
   const completeWorkout = useCallback(
@@ -170,15 +301,38 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
     }));
   }, [session]);
 
+  /** Index der ersten Übung mit offenen Sätzen, oder -1 wenn alles erledigt ist. */
+  const currentIndex = useMemo(
+    () => grouped.findIndex((group) => group.sets.some((set) => !set.isCompleted)),
+    [grouped],
+  );
+
+  const totals = useMemo(() => {
+    const sets = session?.sets ?? [];
+    const completed = sets.filter((set) => set.isCompleted);
+    return {
+      totalSets: sets.length,
+      completedSets: completed.length,
+      volumeKg: completed.reduce((sum, set) => sum + set.weight * set.reps, 0),
+    };
+  }, [session]);
+
   return {
     session,
     previous,
     grouped,
+    currentIndex,
+    totals,
     rest,
-    offline,
+    offline: !online,
+    loadFailed,
     updateSet,
     toggleSet,
+    addSet,
+    removeSet,
+    addExercises,
     completeWorkout,
-    stopRest: () => setRest((value) => ({ ...value, running: false })),
+    stopRest,
+    extendRest,
   };
 }
