@@ -5,7 +5,9 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
   return (
     <input
       className={cn(
-        "h-10 w-full rounded-lg border border-input bg-muted px-3 text-sm outline-none ring-ring placeholder:text-muted-foreground focus-visible:ring-2",
+        // min-w-0: ein <input> ohne size-Attribut bringt ~20 Zeichen intrinsische
+        // Mindestbreite mit und sprengt sonst als Grid-/Flex-Kind schmale Spalten.
+        "h-10 w-full min-w-0 rounded-lg border border-input bg-muted px-3 text-sm outline-none ring-ring placeholder:text-muted-foreground focus-visible:ring-2",
         className,
       )}
       {...props}

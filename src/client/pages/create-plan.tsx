@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, ChevronDown, ChevronUp, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ExercisePicker } from "@/components/exercise-picker";
+import { AiProgress } from "@/components/ui/ai-progress";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
@@ -83,6 +84,9 @@ export function CreatePlanPage() {
 
   function openAlternatives(item: DraftItem) {
     setAltTarget({ exerciseId: item.exerciseId, name: item.name });
+    // Ohne reset() zeigt das Sheet bei einem Fehlschlag die Treffer der zuvor
+    // geöffneten Übung – unter dem neuen Titel.
+    alternatives.reset();
     alternatives.mutate(item.exerciseId);
   }
 
@@ -222,8 +226,9 @@ export function CreatePlanPage() {
                   <div className="flex shrink-0 items-center">
                     <button
                       type="button"
-                      className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted"
+                      className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted disabled:opacity-30"
                       onClick={() => openAlternatives(item)}
+                      disabled={alternatives.isPending}
                       aria-label={`Vergleichbare Übungen zu ${item.name} vorschlagen`}
                     >
                       <Sparkles className="h-4 w-4" />
@@ -261,7 +266,7 @@ export function CreatePlanPage() {
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="grid gap-1">
+                  <div className="grid min-w-0 gap-1">
                     <Label className="text-xs">Sätze</Label>
                     <StepperInput
                       value={item.targetSets}
@@ -271,7 +276,7 @@ export function CreatePlanPage() {
                       ariaLabel={`Sätze für ${item.name}`}
                     />
                   </div>
-                  <div className="grid gap-1">
+                  <div className="grid min-w-0 gap-1">
                     <Label className="text-xs" htmlFor={`reps-${item.exerciseId}`}>
                       Wiederholungen
                     </Label>
@@ -327,9 +332,22 @@ export function CreatePlanPage() {
       >
         {alternatives.isPending ? (
           <div className="grid gap-2 py-2">
+            <AiProgress active className="pb-1" />
             {Array.from({ length: 3 }, (_, index) => (
               <div key={index} className="h-16 animate-pulse rounded-xl bg-muted" />
             ))}
+          </div>
+        ) : alternatives.isError ? (
+          <div className="grid justify-items-center gap-3 py-10">
+            <p className="text-center text-sm text-muted-foreground">
+              Vorschläge konnten nicht geladen werden.
+            </p>
+            <Button
+              variant="secondary"
+              onClick={() => altTarget && alternatives.mutate(altTarget.exerciseId)}
+            >
+              Erneut versuchen
+            </Button>
           </div>
         ) : !alternatives.data || alternatives.data.alternatives.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">

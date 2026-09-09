@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Sparkles } from "lucide-react";
+import { AiProgress } from "@/components/ui/ai-progress";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -172,23 +173,28 @@ export function GeneratePage() {
               <button
                 key={chip}
                 type="button"
-                className="rounded-full border border-border px-3 py-1 text-left text-xs text-muted-foreground transition-colors hover:border-orange-500/50"
+                disabled={generate.isPending}
+                className="rounded-full border border-border px-3 py-1 text-left text-xs text-muted-foreground transition-colors hover:border-orange-500/50 disabled:opacity-50"
                 onClick={() => setPrompt(chip)}
               >
                 {chip}
               </button>
             ))}
           </div>
+          {/* Während des Laufs gesperrt: der Prompt ist beim mutate() bereits
+              festgeschrieben, spätere Änderungen hätten keine Wirkung. */}
           <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
+            disabled={generate.isPending}
             placeholder="z. B. 4 Tage Oberkörper/Unterkörper, Fokus auf Brust und Rücken, 45 Min."
-            className="min-h-24"
+            className="min-h-24 disabled:opacity-60"
           />
           <Button
             size="lg"
             className="w-full"
-            disabled={generate.isPending || !prompt.trim()}
+            loading={generate.isPending}
+            disabled={!prompt.trim()}
             onClick={() => generate.mutate()}
           >
             {generate.isPending ? (
@@ -200,6 +206,10 @@ export function GeneratePage() {
               </>
             )}
           </Button>
+          <AiProgress
+            active={generate.isPending}
+            label="Die KI baut deinen Plan – das dauert meist ein paar Sekunden."
+          />
         </>
       )}
     </div>

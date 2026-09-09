@@ -1,5 +1,6 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import { type ButtonHTMLAttributes } from "react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
@@ -24,20 +25,35 @@ const buttonVariants = cva(
   },
 );
 
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
+  VariantProps<typeof buttonVariants> & {
+    /** Zeigt einen Spinner, sperrt den Knopf und lässt ihn dabei voll sichtbar. */
+    loading?: boolean;
+  };
+
 export function Button({
   className,
   variant,
   size,
   disabled,
+  loading,
   children,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & VariantProps<typeof buttonVariants>) {
+}: ButtonProps) {
   return (
     <button
-      className={cn(buttonVariants({ variant, size }), className)}
-      disabled={disabled}
+      // tailwind-merge behält den späteren disabled:opacity-Wert – ein ladender
+      // Knopf soll nicht auf die Hälfte heruntergedimmt werden.
+      className={cn(
+        buttonVariants({ variant, size }),
+        loading && "disabled:opacity-100",
+        className,
+      )}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
       {...props}
     >
+      {loading ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : null}
       {children}
     </button>
   );

@@ -5,7 +5,8 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
   return (
     <textarea
       className={cn(
-        "min-h-28 w-full rounded-lg border border-input bg-muted px-3 py-2 text-sm outline-none ring-ring placeholder:text-muted-foreground focus-visible:ring-2",
+        // min-w-0 wie beim Input: cols=20 wirkt sonst als intrinsische Mindestbreite.
+        "min-h-28 w-full min-w-0 rounded-lg border border-input bg-muted px-3 py-2 text-sm outline-none ring-ring placeholder:text-muted-foreground focus-visible:ring-2",
         className,
       )}
       {...props}
