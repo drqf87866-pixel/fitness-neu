@@ -40,6 +40,7 @@ export function ExercisesPage() {
   const [search, setSearch] = useState("");
   const [muscleFilter, setMuscleFilter] = useState<string | null>(null);
   const [equipmentFilter, setEquipmentFilter] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [visible, setVisible] = useState(PAGE_SIZE);
 
   const [detail, setDetail] = useState<Exercise | null>(null);
@@ -68,15 +69,24 @@ export function ExercisesPage() {
     [catalog],
   );
 
+  const categoryKeys = useMemo(
+    () =>
+      [...new Set(catalog.map((exercise) => exercise.category))].sort((a, b) =>
+        (MOVEMENT_TAGS[a] ?? a).localeCompare(MOVEMENT_TAGS[b] ?? b, "de"),
+      ),
+    [catalog],
+  );
+
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return catalog.filter((exercise) => {
       if (needle && !exercise.name.toLowerCase().includes(needle)) return false;
       if (muscleFilter && exercise.primaryMuscle !== muscleFilter) return false;
       if (equipmentFilter && exercise.equipment !== equipmentFilter) return false;
+      if (categoryFilter && exercise.category !== categoryFilter) return false;
       return true;
     });
-  }, [catalog, search, muscleFilter, equipmentFilter]);
+  }, [catalog, search, muscleFilter, equipmentFilter, categoryFilter]);
 
   const shown = filtered.slice(0, visible);
 
@@ -163,7 +173,7 @@ export function ExercisesPage() {
         </Button>
       </div>
 
-      {/* Eine Suchzeile plus zwei Chip-Leisten statt vier gestapelter Selects,
+      {/* Eine Suchzeile plus drei Chip-Leisten statt vier gestapelter Selects,
           die auf dem Handy den halben Viewport belegt haben. */}
       <div className="grid gap-2">
         <div className="relative">
@@ -221,6 +231,23 @@ export function ExercisesPage() {
               }}
             >
               {EQUIPMENT_TAGS[key] ?? key}
+            </Chip>
+          ))}
+        </div>
+        <div className="scroll-x flex gap-1.5 pb-1">
+          <Chip active={categoryFilter === null} onClick={() => setCategoryFilter(null)}>
+            Alle Kategorien
+          </Chip>
+          {categoryKeys.map((key) => (
+            <Chip
+              key={key}
+              active={categoryFilter === key}
+              onClick={() => {
+                setCategoryFilter(categoryFilter === key ? null : key);
+                setVisible(PAGE_SIZE);
+              }}
+            >
+              {MOVEMENT_TAGS[key] ?? key}
             </Chip>
           ))}
         </div>

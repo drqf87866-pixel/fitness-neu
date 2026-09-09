@@ -25,7 +25,7 @@ type Props = {
  * Durchsuchbare Übungsauswahl als Bottom-Sheet.
  *
  * Ersetzt die früheren ungefilterten Listen über den kompletten Katalog
- * (144 Einträge) und das Auswahl-`select` im Plan-Editor.
+ * und das Auswahl-`select` im Plan-Editor.
  */
 export function ExercisePicker({
   open,
@@ -37,6 +37,7 @@ export function ExercisePicker({
   const [search, setSearch] = useState("");
   const [muscle, setMuscle] = useState<string | null>(null);
   const [equipment, setEquipment] = useState<string | null>(null);
+  const [category, setCategory] = useState<string | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
   const [visible, setVisible] = useState(PAGE_SIZE);
 
@@ -55,6 +56,7 @@ export function ExercisePicker({
     setSearch("");
     setMuscle(null);
     setEquipment(null);
+    setCategory(null);
     setPicked([]);
     setVisible(PAGE_SIZE);
   }, [open]);
@@ -62,7 +64,7 @@ export function ExercisePicker({
   // Nach jeder Filteränderung wieder oben in der Liste anfangen.
   useEffect(() => {
     setVisible(PAGE_SIZE);
-  }, [search, muscle, equipment]);
+  }, [search, muscle, equipment, category]);
 
   const muscles = useMemo(() => {
     const seen = new Set(catalog.map((exercise) => exercise.primaryMuscle));
@@ -74,15 +76,23 @@ export function ExercisePicker({
     return [...seen].sort();
   }, [catalog]);
 
+  const categoryKeys = useMemo(() => {
+    const seen = new Set(catalog.map((exercise) => exercise.category));
+    return [...seen].sort((a, b) =>
+      (MOVEMENT_TAGS[a] ?? a).localeCompare(MOVEMENT_TAGS[b] ?? b, "de"),
+    );
+  }, [catalog]);
+
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return catalog.filter((exercise) => {
       if (needle && !exercise.name.toLowerCase().includes(needle)) return false;
       if (muscle && exercise.primaryMuscle !== muscle) return false;
       if (equipment && exercise.equipment !== equipment) return false;
+      if (category && exercise.category !== category) return false;
       return true;
     });
-  }, [catalog, search, muscle, equipment]);
+  }, [catalog, search, muscle, equipment, category]);
 
   const shown = filtered.slice(0, visible);
 
@@ -156,6 +166,17 @@ export function ExercisePicker({
           {equipmentKeys.map((key) => (
             <Chip key={key} active={equipment === key} onClick={() => setEquipment(key)}>
               {EQUIPMENT_TAGS[key] ?? key}
+            </Chip>
+          ))}
+        </div>
+
+        <div className="scroll-x mt-1.5 flex gap-1.5 pb-1">
+          <Chip active={category === null} onClick={() => setCategory(null)}>
+            Alle Kategorien
+          </Chip>
+          {categoryKeys.map((key) => (
+            <Chip key={key} active={category === key} onClick={() => setCategory(key)}>
+              {MOVEMENT_TAGS[key] ?? key}
             </Chip>
           ))}
         </div>
