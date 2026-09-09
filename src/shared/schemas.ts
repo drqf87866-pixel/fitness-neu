@@ -78,6 +78,22 @@ export const aiPlanSchema = z.object({
     .max(20),
 });
 
+export const alternativesRequestSchema = z.object({
+  exerciseId: z.string().min(1),
+});
+
+export const aiAlternativesSchema = z.object({
+  alternatives: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(80),
+        reason: z.string().max(200).optional().default(""),
+      }),
+    )
+    .min(1)
+    .max(6),
+});
+
 export const startSessionSchema = z.object({
   planId: z.string().min(1).nullable().optional(),
   id: z.string().min(1).optional(),

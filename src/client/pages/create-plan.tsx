@@ -1,19 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { ArrowLeft, ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ExercisePicker } from "@/components/exercise-picker";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StepperInput } from "@/components/ui/stepper-input";
+import { Sheet } from "@/components/ui/sheet";
 import { api } from "@/lib/api";
 import { muscleLabel } from "@/lib/labels";
 import { getExerciseThumbnail } from "@/lib/exercise-images";
-import type { WorkoutPlan } from "@shared/types";
+import type { Exercise, WorkoutPlan } from "@shared/types";
 
 type DraftItem = {
   exerciseId: string;
@@ -36,6 +38,7 @@ export function CreatePlanPage() {
   const [items, setItems] = useState<DraftItem[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [altTarget, setAltTarget] = useState<{ exerciseId: string; name: string } | null>(null);
 
   const plans = useQuery({
     queryKey: ["plans"],
@@ -67,6 +70,31 @@ export function CreatePlanPage() {
     setItems((current) =>
       current.map((item) => (item.exerciseId === exerciseId ? { ...item, ...patch } : item)),
     );
+  }
+
+  const alternatives = useMutation({
+    mutationFn: (exerciseId: string) =>
+      api<{ alternatives: Exercise[]; usedFallback: boolean }>("/api/ai/alternatives", {
+        method: "POST",
+        body: JSON.stringify({ exerciseId }),
+      }),
+    onError: (error) => toast.error(error.message),
+  });
+
+  function openAlternatives(item: DraftItem) {
+    setAltTarget({ exerciseId: item.exerciseId, name: item.name });
+    alternatives.mutate(item.exerciseId);
+  }
+
+  function applyAlternative(exercise: Exercise) {
+    if (!altTarget) return;
+    updateItem(altTarget.exerciseId, {
+      exerciseId: exercise.id,
+      name: exercise.name,
+      primaryMuscle: exercise.primaryMuscle,
+    });
+    setAltTarget(null);
+    toast.success(`Übung durch „${exercise.name}“ ersetzt`);
   }
 
   function moveItem(index: number, direction: -1 | 1) {
@@ -194,6 +222,14 @@ export function CreatePlanPage() {
                   <div className="flex shrink-0 items-center">
                     <button
                       type="button"
+                      className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted"
+                      onClick={() => openAlternatives(item)}
+                      aria-label={`Vergleichbare Übungen zu ${item.name} vorschlagen`}
+                    >
+                      <Sparkles className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
                       className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted disabled:opacity-30"
                       onClick={() => moveItem(index, -1)}
                       disabled={index === 0}
@@ -282,6 +318,66 @@ export function CreatePlanPage() {
           ])
         }
       />
+
+      <Sheet
+        open={altTarget !== null}
+        onClose={() => setAltTarget(null)}
+        title="Vergleichbare Übungen"
+        description={altTarget ? `Alternativen zu „${altTarget.name}“` : undefined}
+      >
+        {alternatives.isPending ? (
+          <div className="grid gap-2 py-2">
+            {Array.from({ length: 3 }, (_, index) => (
+              <div key={index} className="h-16 animate-pulse rounded-xl bg-muted" />
+            ))}
+          </div>
+        ) : !alternatives.data || alternatives.data.alternatives.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            Keine vergleichbaren Übungen im Katalog gefunden.
+          </p>
+        ) : (
+          <div className="grid gap-1.5 pb-4">
+            {alternatives.data.usedFallback ? (
+              <Badge variant="outline" className="w-fit">
+                Ohne KI ermittelt
+              </Badge>
+            ) : null}
+            {alternatives.data.alternatives.map((exercise) => {
+              const alreadyInPlan = items.some(
+                (item) => item.exerciseId === exercise.id && item.exerciseId !== altTarget?.exerciseId,
+              );
+              const thumb = getExerciseThumbnail(exercise.id);
+              return (
+                <button
+                  key={exercise.id}
+                  type="button"
+                  disabled={alreadyInPlan}
+                  onClick={() => applyAlternative(exercise)}
+                  className="flex min-h-[60px] w-full items-center gap-3 rounded-xl border border-border bg-card p-2 text-left transition-colors disabled:opacity-45 enabled:active:bg-muted"
+                >
+                  {thumb ? (
+                    <img
+                      src={thumb}
+                      alt=""
+                      className="h-11 w-11 shrink-0 rounded-lg object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="h-11 w-11 shrink-0 rounded-lg bg-muted" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{exercise.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {muscleLabel(exercise.primaryMuscle)}
+                      {alreadyInPlan ? " · bereits im Plan" : ""}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </Sheet>
     </div>
   );
 }
