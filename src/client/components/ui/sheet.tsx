@@ -167,7 +167,14 @@ export function Sheet({
       window.removeEventListener("popstate", onStackPopState);
       if (stackOwnsHistoryEntry && !stackPoppedByUser) {
         stackOwnsHistoryEntry = false;
-        window.history.back();
+        // Falls zwischenzeitlich (z. B. durch navigate() aus einem Button im
+        // Sheet heraus) bereits ein neuer History-Eintrag gepusht wurde, ist
+        // der eigene Marker nicht mehr oben auf dem Stack. Ein history.back()
+        // würde dann fälschlich die frisch gepushte Route wieder wegpoppen
+        // (z. B. "Bearbeiten"-Button, der das Menü schließt und im selben
+        // Klick navigiert – die neue Seite ginge sofort wieder zu).
+        const stillOnOwnMarker = window.history.state?.sheetMarker === "sheet-stack";
+        if (stillOnOwnMarker) window.history.back();
       }
       stackPoppedByUser = false;
     };
