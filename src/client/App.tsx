@@ -122,14 +122,11 @@ export function App() {
             überlappte dort die Nav für seine Anzeigedauer. Sonner nutzt unter
             600px Viewportbreite (praktisch jedes Handy) eine eigene
             --mobile-offset-Variable statt --offset – ohne mobileOffset bleibt
-            der obige Offset dort wirkungslos.
-
-            Objekt statt String: Sonner verteilt einen String auf alle vier
-            Seiten. Unter 600px setzt es damit left UND width:100% auf den
-            Toaster – der ragt dann um den Offset über den rechten Rand, und
-            ein überstehendes fixed-Element erzeugt auf dem Handy echten
-            horizontalen Dokument-Scroll. Der Nav-Abstand gehört nur nach
-            unten. */}
+            der obige Offset dort wirkungslos. Objekt statt String, damit der
+            Nav-Abstand nur unten sitzt. Die von Sonner trotzdem gesetzten
+            seitlichen Mobile-Offsets (left:16px + width:100%) fängt der
+            Override in index.css ab – sonst ragt der fixe Toaster 16px über
+            den Viewport und macht die Seite seitlich verschiebbar. */}
         <Toaster
           theme="dark"
           position="bottom-center"

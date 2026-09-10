@@ -3,7 +3,6 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { Activity, CalendarDays, CircleUser, Dumbbell, Home, WifiOff } from "lucide-react";
 import { QuickStartButton } from "@/components/quick-start";
 import { useOnline } from "@/hooks/use-online";
-import { resetViewportZoom } from "@/lib/viewport";
 import { cn } from "@/lib/utils";
 
 const leftLinks = [
@@ -32,10 +31,10 @@ export function AppLayout() {
   const location = useLocation();
   const online = useOnline();
 
-  // SPA-Navigation schleift einen gemerkten Mobile-Zoom mit (Seite erscheint
-  // dann breiter als der Viewport) – pro Route neu auf initial-scale zwingen.
+  // Ein geerbter horizontaler Scroll-Offset (z. B. nach einem Toast oder
+  // History-Restore) würde die ganze Seite seitlich verschieben.
   useEffect(() => {
-    resetViewportZoom();
+    if (window.scrollX !== 0) window.scrollTo(0, window.scrollY);
   }, [location.pathname]);
 
   // Das Live-Training bringt eigenen Kopf und eigene Aktionsleiste mit.

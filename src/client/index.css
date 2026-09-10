@@ -130,6 +130,21 @@ body[data-sheet-open="true"] {
   overflow: hidden;
 }
 
+/* Sonner setzt unter 600px left UND width:100% auf den Toaster – der ragt
+   damit um den linken Offset (16px) über den rechten Rand hinaus. Als
+   position:fixed-Element wird er von html{overflow-x:clip} nicht erfasst und
+   kann die Seite auf dem Handy seitlich verschiebbar machen. width:auto löst
+   left+right sauber auf; der Toast füllt den Toaster dann voll aus und bleibt
+   exakt zwischen den 16px-Rändern zentriert. */
+@media (max-width: 600px) {
+  [data-sonner-toaster] {
+    width: auto !important;
+  }
+  [data-sonner-toaster] [data-sonner-toast] {
+    width: 100% !important;
+  }
+}
+
 @keyframes sheet-in {
   from {
     transform: translateY(100%);
