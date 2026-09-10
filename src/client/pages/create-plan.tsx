@@ -238,11 +238,14 @@ export function CreatePlanPage() {
                       Viewport einzeilig, darunter umgebrochen. truncate bleibt
                       wirksam – das p ist ein Block-Kind, die 7rem begrenzen nur
                       den Container. */}
+                  {/* line-clamp-1 statt truncate: der Name bricht im Notfall um,
+                      statt als nowrap-Min-Content die Grid-Spalte zu weiten
+                      (flex-wrap fängt nur die Summe, nicht das Einzelkind). */}
                   <div className="min-w-[7rem] flex-1">
-                    <p className="truncate text-sm font-medium">
+                    <p className="line-clamp-1 wrap-anywhere text-sm font-medium">
                       {index + 1}. {item.name}
                     </p>
-                    <p className="truncate text-xs text-muted-foreground">
+                    <p className="line-clamp-1 wrap-anywhere text-xs text-muted-foreground">
                       {muscleLabel(item.primaryMuscle)}
                     </p>
                   </div>

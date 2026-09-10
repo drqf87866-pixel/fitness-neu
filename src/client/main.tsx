@@ -27,6 +27,22 @@ document.addEventListener("contextmenu", (event) => {
   event.preventDefault();
 });
 
+// Der Viewport darf horizontal nie scrollen: Ein einziger verrissener Pixel
+// verschiebt Bottom-Nav und Sticky-Header mit – die Seite wirkt "überstehend".
+// overflow-x: clip am html (index.css) blockiert Touch-Gesten, aber Chrome
+// interpretiert clip am Wurzelelement gemäß CSS-Spec als hidden – und hidden
+// bleibt programmatisch scrollbar (scrollIntoView, Fokus, Scroll-Restoration).
+// Der Route-Wechsel-Guard in components/layout.tsx greift deshalb zu spät,
+// wenn der Riss mitten in einer Sitzung entsteht. Dieser Listener schnappt
+// sofort zurück; vertikales Scrollen bleibt unangetastet.
+window.addEventListener(
+  "scroll",
+  () => {
+    if (window.scrollX !== 0) window.scrollTo(0, window.scrollY);
+  },
+  { passive: true },
+);
+
 function Root() {
   // Horizontaler Overflow ist auf dem Handy schwer zu fassen und am Desktop
   // nicht reproduzierbar – die Probe benennt den Verursacher direkt am Gerät.

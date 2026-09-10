@@ -109,9 +109,11 @@ export function PlansPage() {
                   className="min-w-0 flex-1 text-left"
                   onClick={() => navigate(`/plans/${plan.id}`)}
                 >
-                  <CardTitle className="truncate">{plan.title}</CardTitle>
+                  {/* line-clamp-1 statt truncate: nowrap-Min-Content weitet
+                      sonst die Grid-Spalte der Kartenliste (siehe workout.tsx). */}
+                  <CardTitle className="line-clamp-1 wrap-anywhere">{plan.title}</CardTitle>
                   {plan.description ? (
-                    <p className="line-clamp-2 text-sm text-muted-foreground">
+                    <p className="line-clamp-2 wrap-anywhere text-sm text-muted-foreground">
                       {plan.description}
                     </p>
                   ) : null}

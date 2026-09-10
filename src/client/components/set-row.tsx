@@ -45,7 +45,7 @@ export function SetRow({
         <div className="flex items-baseline gap-2 px-0.5">
           <span className="text-xs font-semibold text-muted-foreground">Satz {setNumber}</span>
           {previous ? (
-            <span className="truncate text-[11px] text-muted-foreground">
+            <span className="line-clamp-1 wrap-anywhere text-[11px] text-muted-foreground">
               zuletzt {kgToDisplay(previous.weight, unit)} {unitLabel(unit)} × {previous.reps}
             </span>
           ) : null}

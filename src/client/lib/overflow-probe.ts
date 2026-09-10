@@ -142,6 +142,15 @@ export function reportOverflow({ mark = false } = {}): OverflowReport {
   const root = document.documentElement;
   const limit = root.clientWidth;
 
+  // Ein seitlich verrissener Viewport (scrollX > 0) kippt die gesamte Messung:
+  // #root liegt dann links außerhalb, wird als Treffer gemeldet – und der
+  // outermost-Filter weiter unten blendet den echten Verursacher aus (genau
+  // das passierte im /workout-Report vom 2026-09: nur #root, Täter unsichtbar).
+  // Deshalb: Vor dem Messen zurückschnappen lassen und den alten Stand
+  // protokollieren – er ist selbst ein Befund, nicht Rauschen.
+  const scrollXBefore = Math.round(window.scrollX);
+  if (scrollXBefore !== 0) window.scrollTo(0, window.scrollY);
+
   const panel = document.getElementById(PANEL_ID);
   const offenders: Element[] = [];
   for (const element of document.body.querySelectorAll("*")) {
@@ -186,9 +195,17 @@ export function reportOverflow({ mark = false } = {}): OverflowReport {
       "html.clientWidth": limit,
       "html.scrollWidth (geclippt)": root.scrollWidth,
       "html.scrollWidth (roh)": rawScrollWidth(),
+      // Trennt zwei offene Hypothesen: Steht hier "visible", läuft noch alter
+      // CSS-Stand (Service-Worker-Cache). Steht hier "clip", ist der Schutz aus
+      // index.css aktiv – Chrome interpretiert clip am Viewport aber gemäß
+      // CSS-Spec als hidden, und hidden bleibt programmatisch scrollbar
+      // (scrollIntoView, Fokus). Der Wert erklärt also, wie scrollX überhaupt
+      // von 0 abweichen konnte.
+      "html.overflowX (computed)": getComputedStyle(root).overflowX,
       "body.width": Math.round(body.width),
       "body.right": Math.round(body.right),
       "window.innerWidth": window.innerWidth,
+      "window.scrollX (vor Reset)": scrollXBefore,
       "window.scrollX": Math.round(window.scrollX),
       "screen.width": window.screen.width,
       devicePixelRatio: window.devicePixelRatio,
@@ -224,14 +241,19 @@ const MIN_SANE_VIEWPORT = 320;
 
 function verdict(report: OverflowReport) {
   const width = Number(report.context["html.clientWidth"]);
+  const scrollXBefore = Number(report.context["window.scrollX (vor Reset)"]);
+  const shiftNote =
+    scrollXBefore > 0
+      ? `\n→ Viewport war um ${scrollXBefore}px seitlich verrissen – für die Messung zurückgesetzt.`
+      : "";
   if (width < MIN_SANE_VIEWPORT) {
     return `BEFUND: Layout-Viewport ${width}px – zu schmal (< ${MIN_SANE_VIEWPORT}px).
-→ Seiten-Zoom in Chrome oder geteilter Bildschirm, nicht das CSS.`;
+→ Seiten-Zoom in Chrome oder geteilter Bildschirm, nicht das CSS.${shiftNote}`;
   }
   if (report.hits.length > 0) {
-    return "BEFUND: echter DOM-Overflow – siehe Kette unten, das ^-Element ist die Ursache.";
+    return `BEFUND: echter DOM-Overflow – siehe Kette unten, das ^-Element ist die Ursache.${shiftNote}`;
   }
-  return "BEFUND: unauffällig – nichts ragt heraus.";
+  return `BEFUND: unauffällig – nichts ragt heraus.${shiftNote}`;
 }
 
 function formatReport(report: OverflowReport) {

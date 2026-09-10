@@ -88,7 +88,7 @@ export function AnalyticsPage() {
               className="flex items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2"
             >
               <div className="min-w-0">
-                <p className="truncate font-medium">{pr.exerciseName}</p>
+                <p className="line-clamp-1 wrap-anywhere font-medium">{pr.exerciseName}</p>
                 <p className="text-xs text-muted-foreground tabular-nums">
                   {kgToDisplay(pr.maxWeight, unit)} {unitLabel(unit)} × {pr.maxWeightReps} · 1RM{" "}
                   {kgToDisplay(pr.estimated1rm, unit)} {unitLabel(unit)}

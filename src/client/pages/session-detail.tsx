@@ -91,7 +91,7 @@ export function SessionDetailPage() {
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div className="min-w-0">
-          <h2 className="truncate text-xl font-semibold">
+          <h2 className="line-clamp-1 wrap-anywhere text-xl font-semibold">
             {session.planTitle ?? "Freies Training"}
           </h2>
           <p className="text-sm text-muted-foreground">{formatDate(session.startedAt)}</p>
@@ -141,7 +141,9 @@ export function SessionDetailPage() {
                   />
                 ) : null}
                 <div className="min-w-0 flex-1">
-                  <CardTitle className="truncate">{group.name}</CardTitle>
+                  {/* line-clamp-1 statt truncate: nowrap-Min-Content weitet sonst
+                      die Grid-Spalte der Karten (siehe workout.tsx). */}
+                  <CardTitle className="line-clamp-1 wrap-anywhere">{group.name}</CardTitle>
                   <p className="text-xs text-muted-foreground">
                     {muscleLabel(group.primaryMuscle)} · {done.length} von {group.sets.length} Sätzen
                   </p>

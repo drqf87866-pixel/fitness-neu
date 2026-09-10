@@ -275,8 +275,16 @@ export function WorkoutPage() {
                     </span>
                   )}
                   <div className="min-w-0 flex-1">
-                    <CardTitle className="truncate">{group.name}</CardTitle>
-                    <p className="truncate text-xs text-muted-foreground">
+                    {/* line-clamp-1 statt truncate: truncate erzwingt nowrap – der
+                        Min-Content der Zeile ist dann der vollständige Text und
+                        wandert über die Grid-Items (Karte → Spalte) in das
+                        Track-Sizing. Gemessen: "· Start 50 kg" im Untertitel
+                        weite die Spalte um exakt diesen Betrag (Gerät: 427px
+                        scrollWidth bei 385px Viewport). line-clamp-1 bricht um,
+                        sieht identisch aus (1 Zeile + Ellipse) und hat als
+                        Min-Content nur das längste Wort. */}
+                    <CardTitle className="line-clamp-1 wrap-anywhere">{group.name}</CardTitle>
+                    <p className="line-clamp-1 wrap-anywhere text-xs text-muted-foreground">
                       {muscleLabel(group.primaryMuscle)}
                       {group.targetReps ? ` · Ziel ${group.sets.length} × ${group.targetReps}` : ""}
                       {group.suggestedWeight

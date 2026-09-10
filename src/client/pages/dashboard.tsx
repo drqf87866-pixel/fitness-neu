@@ -61,7 +61,7 @@ export function DashboardPage() {
   return (
     <div className="grid gap-4">
       <div>
-        <h2 className="text-2xl font-semibold">{greeting(me.data?.user.name ?? "")}</h2>
+        <h2 className="wrap-anywhere text-2xl font-semibold">{greeting(me.data?.user.name ?? "")}</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           {stats.data && stats.data.sessionCountThisWeek > 0
             ? `${stats.data.sessionCountThisWeek} Workout${stats.data.sessionCountThisWeek !== 1 ? "s" : ""} diese Woche`
@@ -77,7 +77,7 @@ export function DashboardPage() {
             <Badge variant="outline" className="mb-2 border-orange-500/40 text-orange-300">
               Nicht beendet
             </Badge>
-            <CardTitle className="text-lg">
+            <CardTitle className="wrap-anywhere text-lg">
               {openSession.planTitle ?? "Freies Training"}
             </CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">

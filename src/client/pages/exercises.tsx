@@ -278,7 +278,7 @@ export function ExercisesPage() {
                   <div className="h-14 w-14 shrink-0 rounded-lg bg-muted" />
                 )}
                 <div className="min-w-0 flex-1">
-                  <CardTitle className="truncate">{exercise.name}</CardTitle>
+                  <CardTitle className="line-clamp-1 wrap-anywhere">{exercise.name}</CardTitle>
                   <div className="mt-1 flex flex-wrap gap-1">
                     <Badge variant="outline">{muscleLabel(exercise.primaryMuscle)}</Badge>
                     <Badge variant="outline">

@@ -199,7 +199,7 @@ export function HistoryPage() {
                   )
                 }
               >
-                <CardTitle className="truncate">
+                <CardTitle className="line-clamp-1 wrap-anywhere">
                   {session.planTitle ?? "Freies Training"}
                 </CardTitle>
                 <p className="text-sm text-muted-foreground">{formatDay(session.startedAt)}</p>

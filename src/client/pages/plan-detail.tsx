@@ -65,10 +65,10 @@ export function PlanDetailPage() {
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <div>
-          <h2 className="text-xl font-semibold">{plan.title}</h2>
+        <div className="min-w-0">
+          <h2 className="wrap-anywhere text-xl font-semibold">{plan.title}</h2>
           {plan.description ? (
-            <p className="text-sm text-muted-foreground">{plan.description}</p>
+            <p className="wrap-anywhere text-sm text-muted-foreground">{plan.description}</p>
           ) : null}
         </div>
       </div>
@@ -87,8 +87,12 @@ export function PlanDetailPage() {
           disabled={start.isPending}
           onClick={() => start.mutate(plan.id)}
         >
-          <Play className="h-4 w-4" />
-          {plan.title} starten
+          <Play className="h-4 w-4 shrink-0" />
+          {/* Der Titel ist Nutzereingabe: als nackter Flex-Item-Text hätte der
+              Knopf den vollen Text als Min-Content und weitet die Grid-Spalte
+              (siehe workout.tsx). line-clamp-1 + wrap-anywhere halten ihn auf
+              einer Zeile mit Ellipse. */}
+          <span className="line-clamp-1 wrap-anywhere text-left">{plan.title} starten</span>
         </Button>
       </Card>
 
@@ -106,7 +110,7 @@ export function PlanDetailPage() {
                       {index + 1}
                     </span>
                     <div>
-                      <CardTitle>{ex.exerciseName}</CardTitle>
+                      <CardTitle className="line-clamp-1 wrap-anywhere">{ex.exerciseName}</CardTitle>
                       <p className="text-xs text-muted-foreground">
                         {muscleLabel(ex.primaryMuscle)} ·{" "}
                         {ex.targetSets} × {ex.targetReps}
