@@ -206,7 +206,24 @@ export function CreatePlanPage() {
             const thumb = getExerciseThumbnail(item.exerciseId);
             return (
               <Card key={item.exerciseId} compact className="grid gap-3">
-                <div className="flex items-center gap-2">
+                {/* flex-wrap ist hier die eigentliche Fehlerbehebung, nicht Kosmetik.
+                    Eine nicht umbrechende Flexzeile hat als Min-Content die SUMME
+                    ihrer Kinder: 40px Thumb + 4x36px Buttons + 2x8px Gap + das
+                    längste unbrechbare Wort des Übungsnamens ("Schrägbankdrücken",
+                    ~130px) = ~330px, plus 26px Kartenrahmen = 356px. min-w-0 auf dem
+                    Textblock hilft dagegen nicht – das war der Denkfehler in e49c0d3:
+                    min-width:0 erlaubt dem Flex-Item, beim Layout zu schrumpfen,
+                    senkt aber seinen Min-Content-Beitrag nicht.
+                    Über die Kette von Grid-Items mit min-width:auto (Karte →
+                    div.grid.gap-2) wird dieser Wert nach oben durchgereicht: Bei
+                    360px Viewport war die Seite dadurch 380px breit, und das
+                    overflow-x:clip auf html hat die letzten 20px hart abgeschnitten
+                    – genau die rechts abgeschnittenen Kacheln.
+                    Mit flex-wrap ist der Min-Content nur noch das GRÖSSTE Kind
+                    (144px), nicht mehr die Summe. Gemessen in headless Chrome:
+                    vorher div.grid.gap-2 = 364px in einem 328px-Elternteil,
+                    nachher überall exakt 328px. */}
+                <div className="flex flex-wrap items-center gap-2">
                   {thumb ? (
                     <img
                       src={thumb}
@@ -215,7 +232,13 @@ export function CreatePlanPage() {
                       loading="lazy"
                     />
                   ) : null}
-                  <div className="min-w-0 flex-1">
+                  {/* min-w-[7rem] steuert, WANN umgebrochen wird: Flexbox bricht um,
+                      sobald die Summe der hypothetischen Hauptgrößen die Zeile
+                      sprengt (40 + 112 + 144 + 2x8 = 312px). Gemessen: ab 393px
+                      Viewport einzeilig, darunter umgebrochen. truncate bleibt
+                      wirksam – das p ist ein Block-Kind, die 7rem begrenzen nur
+                      den Container. */}
+                  <div className="min-w-[7rem] flex-1">
                     <p className="truncate text-sm font-medium">
                       {index + 1}. {item.name}
                     </p>
@@ -223,7 +246,9 @@ export function CreatePlanPage() {
                       {muscleLabel(item.primaryMuscle)}
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center">
+                  {/* ml-auto wirkt nur in der umgebrochenen Zeile – einzeilig
+                      frisst der flex-1-Textblock den freien Platz ohnehin auf. */}
+                  <div className="ml-auto flex shrink-0 items-center">
                     <button
                       type="button"
                       className="flex h-11 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors active:bg-muted disabled:opacity-30"
@@ -265,7 +290,11 @@ export function CreatePlanPage() {
                     </button>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                {/* auto-fit statt zwei starrer Spalten: der StepperInput braucht
+                    fest 86px, bei vergrößertem rem oder sehr schmalem Gerät reißt
+                    grid-cols-2 sonst hart. Ab ~320px Viewport bleibt es sichtbar
+                    bei zwei Spalten, darunter fällt die Zeile auf eine zurück. */}
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-2">
                   <div className="grid min-w-0 gap-1">
                     <Label className="text-xs">Sätze</Label>
                     <StepperInput

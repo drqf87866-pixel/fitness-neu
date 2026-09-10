@@ -8,6 +8,7 @@ import { Field } from "@/components/ui/dialog";
 import { Dialog } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { useAuthQuery, useLogout } from "@/lib/auth";
+import { isOverflowDebugEnabled, setOverflowDebug } from "@/lib/debug-flag";
 import { EXPERIENCE_LABELS, GOAL_LABELS } from "@/lib/labels";
 import type { UserProfile } from "@shared/types";
 import { toast } from "sonner";
@@ -20,6 +21,7 @@ export function ProfilePage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<Partial<UserProfile>>({});
   const [pwOpen, setPwOpen] = useState(false);
+  const [overflowDebug] = useState(isOverflowDebugEnabled);
   const [pwForm, setPwForm] = useState({ current: "", next: "", confirm: "" });
 
   useEffect(() => {
@@ -213,6 +215,30 @@ export function ProfilePage() {
             onClick={() => setPwOpen(true)}
           >
             Passwort ändern
+          </Button>
+        </Card>
+      </div>
+
+      {/* Diagnose */}
+      <div>
+        <h3 className="mb-3 text-sm font-medium text-muted-foreground">Diagnose</h3>
+        <Card className="grid gap-2">
+          <p className="text-xs text-muted-foreground">
+            Zeigt an, welches Element die Seite seitlich sprengt. Nur zur
+            Fehlersuche – die App wirkt danach langsamer.
+          </p>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => {
+              setOverflowDebug(!overflowDebug);
+              // Die Probe hängt sich beim Start ein; ein Neuladen ist der
+              // ehrlichste Weg, sie an- und wieder abzuschalten. Der State
+              // wird beim Neuaufbau aus localStorage gelesen.
+              window.location.reload();
+            }}
+          >
+            {overflowDebug ? "Overflow-Diagnose ausschalten" : "Overflow-Diagnose einschalten"}
           </Button>
         </Card>
       </div>
