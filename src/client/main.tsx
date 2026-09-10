@@ -9,6 +9,16 @@ import "./index.css";
 registerSW({ immediate: true });
 
 function Root() {
+  // Horizontaler Overflow ist auf dem Handy schwer zu fassen und am Desktop
+  // nicht reproduzierbar – die Probe benennt den Verursacher direkt am Gerät.
+  useEffect(() => {
+    const wantsPanel = new URLSearchParams(window.location.search).get("debug") === "overflow";
+    if (!import.meta.env.DEV && !wantsPanel) return;
+    void import("./lib/overflow-probe").then(({ startOverflowProbe }) =>
+      startOverflowProbe({ panel: wantsPanel }),
+    );
+  }, []);
+
   useEffect(() => {
     void flushOfflineQueue();
     resetViewportZoom();

@@ -18,7 +18,11 @@ const rightLinks = [
 
 function navItemClass({ isActive }: { isActive: boolean }) {
   return cn(
-    "flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors",
+    // min-w-0 + truncate: die Labels sind unbrechbare Einzelwörter
+    // ("Fortschritt") und sprengen bei aktivierter Schriftskalierung sonst
+    // ihre 1fr-Spur – die Nav ist fixed, das kostet die ganze Seite den
+    // seitlichen Halt.
+    "flex min-h-[56px] min-w-0 flex-col items-center justify-center gap-0.5 truncate text-[11px] font-medium transition-colors",
     isActive ? "text-primary" : "text-muted-foreground",
   );
 }

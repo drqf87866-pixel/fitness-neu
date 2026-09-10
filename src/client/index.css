@@ -34,6 +34,16 @@ body,
   min-height: 100%;
 }
 
+/* Ein seitlich verschobener Viewport macht die App unbedienbar: die fixe
+   Bottom-Nav rutscht mit und der Dokument-Scrollbalken landet darüber.
+   clip statt hidden, weil clip keinen Scrollcontainer erzeugt – die
+   Sticky-Header im Sheet und im Live-Training bleiben so funktionsfähig.
+   Das versteckt Overflows nicht stillschweigend: lib/overflow-probe.ts
+   meldet sie in dev und benennt sie per ?debug=overflow auf dem Gerät. */
+html {
+  overflow-x: clip;
+}
+
 body {
   margin: 0;
   background: var(--color-background);

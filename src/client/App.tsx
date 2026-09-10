@@ -28,6 +28,14 @@ const queryClient = new QueryClient({
   },
 });
 
+/** Hält den Toast über der Bottom-Navigation (56px hohe Zeile + Abstand). */
+const TOAST_OFFSET = {
+  bottom: "calc(56px + 16px + env(safe-area-inset-bottom))",
+  top: "16px",
+  left: "16px",
+  right: "16px",
+};
+
 function Splash() {
   return <div className="grid min-h-dvh place-items-center text-muted-foreground">Lädt…</div>;
 }
@@ -114,12 +122,19 @@ export function App() {
             überlappte dort die Nav für seine Anzeigedauer. Sonner nutzt unter
             600px Viewportbreite (praktisch jedes Handy) eine eigene
             --mobile-offset-Variable statt --offset – ohne mobileOffset bleibt
-            der obige Offset dort wirkungslos. */}
+            der obige Offset dort wirkungslos.
+
+            Objekt statt String: Sonner verteilt einen String auf alle vier
+            Seiten. Unter 600px setzt es damit left UND width:100% auf den
+            Toaster – der ragt dann um den Offset über den rechten Rand, und
+            ein überstehendes fixed-Element erzeugt auf dem Handy echten
+            horizontalen Dokument-Scroll. Der Nav-Abstand gehört nur nach
+            unten. */}
         <Toaster
           theme="dark"
           position="bottom-center"
-          offset="calc(56px + 16px + env(safe-area-inset-bottom))"
-          mobileOffset="calc(56px + 16px + env(safe-area-inset-bottom))"
+          offset={TOAST_OFFSET}
+          mobileOffset={TOAST_OFFSET}
         />
       </ConfirmProvider>
     </QueryClientProvider>
