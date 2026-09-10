@@ -8,6 +8,25 @@ import "./index.css";
 
 registerSW({ immediate: true });
 
+// Long-Press-Kontextmenü auf Touch-Geräten unterbinden. Rechtsklick mit Maus
+// und Paste/Selektion in Formularfeldern bleiben erhalten.
+document.addEventListener("contextmenu", (event) => {
+  const target = event.target;
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
+  ) {
+    return;
+  }
+  const pointerType = (event as PointerEvent).pointerType;
+  const isTouch = pointerType
+    ? pointerType === "touch"
+    : window.matchMedia("(pointer: coarse)").matches;
+  if (!isTouch) return;
+  event.preventDefault();
+});
+
 function Root() {
   // Horizontaler Overflow ist auf dem Handy schwer zu fassen und am Desktop
   // nicht reproduzierbar – die Probe benennt den Verursacher direkt am Gerät.

@@ -76,6 +76,32 @@ textarea,
   touch-action: manipulation;
 }
 
+/* Long-Press-Menü auf Touch-Geräten unterbinden (Auswahl-Callout, Kontextmenü).
+   Nur bei groben Zeigern, damit Desktop-Maus und Textauswahl dort normal bleiben. */
+@media (hover: none) and (pointer: coarse) {
+  body {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Formularfelder bleiben editierbar/selektierbar (Notizen, Suche, Login …) */
+  input,
+  textarea,
+  select,
+  [contenteditable="true"] {
+    -webkit-touch-callout: default;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* Deko-Bilder nicht per Long-Press greifbar */
+  img {
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+}
+
 /* Number-Spinner verstecken: auf Mobil unbrauchbar klein, am Desktop verstellen
    sie Werte beim Scrollen. Wir liefern eigene Stepper-Buttons. */
 input[type="number"]::-webkit-outer-spin-button,
