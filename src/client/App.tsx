@@ -1,5 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Navigate, Outlet, RouterProvider, createBrowserRouter } from "react-router";
+import {
+  Navigate,
+  Outlet,
+  RouterProvider,
+  createBrowserRouter,
+  isRouteErrorResponse,
+  useNavigate,
+  useRouteError,
+} from "react-router";
 import { Toaster } from "sonner";
 import { AppLayout } from "@/components/layout";
 import { ConfirmProvider } from "@/components/ui/confirm";
@@ -56,6 +64,42 @@ function AuthUnavailable({ onRetry }: { onRetry: () => void }) {
   );
 }
 
+function RouteError() {
+  const error = useRouteError();
+  const navigate = useNavigate();
+
+  const message = isRouteErrorResponse(error)
+    ? `${error.status} ${error.statusText}`
+    : error instanceof Error
+      ? error.message
+      : "Unbekannter Fehler";
+
+  return (
+    <div className="grid min-h-dvh place-items-center px-6 text-center">
+      <div>
+        <p className="text-lg font-semibold">Seite konnte nicht geladen werden</p>
+        <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+        <div className="mt-4 flex flex-col items-center gap-3">
+          <button
+            className="text-sm text-orange-300 underline"
+            type="button"
+            onClick={() => window.location.reload()}
+          >
+            Erneut versuchen
+          </button>
+          <button
+            className="text-sm text-muted-foreground underline"
+            type="button"
+            onClick={() => navigate("/")}
+          >
+            Zurück zum Start
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RequireAuth() {
   const me = useAuthQuery();
   if (me.isLoading) return <Splash />;
@@ -80,6 +124,7 @@ function GuestOnly() {
 const router = createBrowserRouter([
   {
     element: <GuestOnly />,
+    errorElement: <RouteError />,
     children: [
       { path: "/login", element: <LoginPage /> },
       { path: "/register", element: <RegisterPage /> },
@@ -87,6 +132,7 @@ const router = createBrowserRouter([
   },
   {
     element: <RequireAuth />,
+    errorElement: <RouteError />,
     children: [
       {
         element: <AppLayout />,

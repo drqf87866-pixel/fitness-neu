@@ -83,6 +83,15 @@ export function WorkoutPage() {
     activeRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [activeId]);
 
+  const alternatives = useMutation({
+    mutationFn: (exerciseId: string) =>
+      api<{ alternatives: Exercise[]; usedFallback: boolean }>("/api/ai/alternatives", {
+        method: "POST",
+        body: JSON.stringify({ exerciseId }),
+      }),
+    onError: (error) => toast.error(error.message),
+  });
+
   if (!session) {
     return (
       <div className="grid gap-3 pt-safe">
@@ -152,15 +161,6 @@ export function WorkoutPage() {
       setFinishing(false);
     }
   }
-
-  const alternatives = useMutation({
-    mutationFn: (exerciseId: string) =>
-      api<{ alternatives: Exercise[]; usedFallback: boolean }>("/api/ai/alternatives", {
-        method: "POST",
-        body: JSON.stringify({ exerciseId }),
-      }),
-    onError: (error) => toast.error(error.message),
-  });
 
   function openAlternatives(group: (typeof grouped)[number]) {
     setAltTarget({ exerciseId: group.exerciseId, name: group.name });
