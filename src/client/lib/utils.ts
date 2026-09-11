@@ -5,6 +5,16 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** Suchschlüssel ohne Groß-/Kleinschreibung und Akzente: "Schragbank" findet "Schrägbank". */
+export function searchKey(value: string) {
+  return value
+    .toLowerCase()
+    .replaceAll("ß", "ss")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim();
+}
+
 export function formatDate(ts: number) {
   return new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(ts));
 }

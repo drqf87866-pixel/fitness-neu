@@ -30,10 +30,14 @@ export function AnalyticsPage() {
   const volume = useQuery({
     queryKey: ["volume", weeks],
     queryFn: () => {
-      // Bis zum Ende der laufenden Woche, damit die aktuelle Woche vollständig zählt.
       const to = Date.now();
       const from = to - weeks * WEEK_MS;
-      return api<{ volume: VolumePoint[] }>(`/api/analytics/volume?from=${from}&to=${to}`);
+      // Zeitzone mitschicken: der Server bucketet sonst nach UTC-Tagen, und
+      // Trainings kurz nach Mitternacht landen in der falschen Kalenderwoche.
+      const tz = new Date().getTimezoneOffset();
+      return api<{ volume: VolumePoint[] }>(
+        `/api/analytics/volume?from=${from}&to=${to}&tz=${tz}`,
+      );
     },
   });
 

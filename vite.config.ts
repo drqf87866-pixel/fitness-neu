@@ -51,10 +51,16 @@ export default defineConfig({
       workbox: {
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api\//],
-        globPatterns: ["**/*.{js,css,html,svg,ico,woff2,png,jpg,jpeg,webp}"],
+        // Übungsbilder (~7 MB) bewusst NICHT im Precache: sonst lädt jede
+        // Installation und jedes Update alles vorab, auch auf Mobilfunk. Sie
+        // landen beim ersten Anzeigen im Runtime-Cache unten.
+        globPatterns: ["**/*.{js,css,html,svg,ico,woff2,png,webp}"],
         // Nur lesende Katalog-Requests cachen. Auth/Sessions/Analytics bleiben
         // immer NetworkOnly, sonst liefert der SW bei langsamem Netz (>4s)
         // 24h alte /me-/open-/Volumen-Stände zurück.
+        // Cache-Namen tragen eine Version, damit Formatwechsel alte Einträge
+        // nicht weiterverwenden. Der Katalog-Cache enthält eigene Übungen und
+        // wird beim Logout geleert (lib/auth.ts, Präfix "exercises-api").
         runtimeCaching: [
           {
             urlPattern: ({ url, request }) =>
@@ -62,7 +68,7 @@ export default defineConfig({
             handler: "NetworkFirst",
             method: "GET",
             options: {
-              cacheName: "exercises-cache",
+              cacheName: "exercises-api-v1",
               networkTimeoutSeconds: 4,
               cacheableResponse: {
                 statuses: [200],
@@ -70,6 +76,22 @@ export default defineConfig({
               expiration: {
                 maxEntries: 40,
                 maxAgeSeconds: 60 * 60,
+              },
+            },
+          },
+          {
+            urlPattern: ({ url, request }) =>
+              request.method === "GET" && url.pathname.startsWith("/exercises/"),
+            handler: "CacheFirst",
+            method: "GET",
+            options: {
+              cacheName: "exercise-images-v1",
+              cacheableResponse: {
+                statuses: [200],
+              },
+              expiration: {
+                maxEntries: 150,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
               },
             },
           },

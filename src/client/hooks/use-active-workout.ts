@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { unlockAlerts } from "@/lib/alerts";
 import { api } from "@/lib/api";
 import { syncSession, type SyncOutcome } from "@/lib/sync";
 import { loadLocalSession, storeServerSession, writeLocalChange } from "@/lib/db";
@@ -215,6 +216,9 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
 
       if (!nextCompleted) return;
       const meta = current.exercises.find((ex) => ex.exerciseId === target.exerciseId);
+      // Läuft noch innerhalb des Taps: Ton und Benachrichtigungen für das
+      // spätere Pausenende freigeben.
+      unlockAlerts();
       navigator.vibrate?.(40);
       startRest(meta?.restSeconds ?? DEFAULT_REST_SECONDS);
     },

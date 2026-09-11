@@ -8,3 +8,6 @@ dist
 worker-configuration.d.ts
 cookies.txt
 tmp-*.json
+# Vite lädt .env-Dateien automatisch – nie committen.
+.env
+.env.*

@@ -23,8 +23,9 @@ Edit `src/db/schema.ts` → `pnpm db:generate` (creates migration in `drizzle/mi
 
 ## Gotchas
 
-- Service-worker caching is deliberately minimal: only `GET /api/exercises` is cached (NetworkFirst, 1h). Auth/session/analytics must stay network-only — read the comment in `vite.config.ts` before touching `runtimeCaching`.
-- Offline workout sets queue in IndexedDB (db `fitness-neu`) and sync later.
+- Service-worker caching is deliberately minimal: only `GET /api/exercises` (NetworkFirst, 1h, cleared on logout) and `/exercises/*` images (CacheFirst, not precached) are cached. Auth/session/analytics must stay network-only — read the comment in `vite.config.ts` before touching `runtimeCaching`.
+- The active workout lives in IndexedDB (db `fitness-neu`) as the source of truth: every edit bumps a `revision` and is saved dirty *before* upload (`writeLocalChange`). All uploads go through `syncSession()` in `src/client/lib/sync.ts` (single-flight per session); completion is stored as `pendingComplete` and PATCHed only after the sets PUT succeeded. Don't add parallel upload paths.
+- D1 binds at most 100 parameters per statement: use `chunkedInserts()` (`src/worker/lib/helpers.ts`) for multi-row inserts.
 - UI copy and error messages are German — keep user-facing strings German.
 - `GEMINI_API_KEY` is optional (`.dev.vars` locally, `wrangler secret put` remotely); AI plan generation falls back to a heuristic plan without it.
 - `scripts/` is one-off exercise-image/icon tooling (sharp, PowerShell, Python), not app code.

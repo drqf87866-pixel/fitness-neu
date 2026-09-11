@@ -13,14 +13,9 @@ import { Sheet } from "@/components/ui/sheet";
 import { Field } from "@/components/ui/dialog";
 import { useConfirm } from "@/components/ui/confirm";
 import { api } from "@/lib/api";
-import {
-  CATEGORY_LABELS,
-  EQUIPMENT_TAGS,
-  MOVEMENT_TAGS,
-  MUSCLE_LABELS,
-  muscleLabel,
-} from "@/lib/labels";
+import { CATEGORY_LABELS, EQUIPMENT_TAGS, MUSCLE_LABELS, muscleLabel } from "@/lib/labels";
 import { getExerciseImage, getExerciseThumbnail } from "@/lib/exercise-images";
+import { searchKey } from "@/lib/utils";
 import type { Exercise, ExerciseCategory } from "@shared/types";
 
 const PAGE_SIZE = 30;
@@ -72,15 +67,15 @@ export function ExercisesPage() {
   const categoryKeys = useMemo(
     () =>
       [...new Set(catalog.map((exercise) => exercise.category))].sort((a, b) =>
-        (MOVEMENT_TAGS[a] ?? a).localeCompare(MOVEMENT_TAGS[b] ?? b, "de"),
+        (CATEGORY_LABELS[a] ?? a).localeCompare(CATEGORY_LABELS[b] ?? b, "de"),
       ),
     [catalog],
   );
 
   const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase();
+    const needle = searchKey(search);
     return catalog.filter((exercise) => {
-      if (needle && !exercise.name.toLowerCase().includes(needle)) return false;
+      if (needle && !searchKey(exercise.name).includes(needle)) return false;
       if (muscleFilter && exercise.primaryMuscle !== muscleFilter) return false;
       if (equipmentFilter && exercise.equipment !== equipmentFilter) return false;
       if (categoryFilter && exercise.category !== categoryFilter) return false;
@@ -247,7 +242,7 @@ export function ExercisesPage() {
                 setVisible(PAGE_SIZE);
               }}
             >
-              {MOVEMENT_TAGS[key] ?? key}
+              {CATEGORY_LABELS[key] ?? key}
             </Chip>
           ))}
         </div>
@@ -350,6 +345,9 @@ export function ExercisesPage() {
                   alt={`${detail.name}, Endposition`}
                   className="h-44 w-full rounded-lg bg-muted object-cover"
                 />
+                <p className="col-span-2 text-[11px] text-muted-foreground">
+                  Bild: {detailImages.credit}
+                </p>
               </div>
             ) : (
               <div className="flex h-24 items-center justify-center rounded-lg bg-muted text-xs text-muted-foreground">
@@ -378,7 +376,7 @@ export function ExercisesPage() {
               <div className="flex justify-between gap-3">
                 <dt className="text-muted-foreground">Bewegung</dt>
                 <dd className="text-right">
-                  {MOVEMENT_TAGS[detail.category] ?? detail.category}
+                  {CATEGORY_LABELS[detail.category] ?? detail.category}
                 </dd>
               </div>
             </dl>

@@ -1,0 +1,10 @@
+# Security-Header für die statischen SPA-Assets (Cloudflare Workers Static Assets).
+# API-Antworten des Workers setzen ihre Header selbst (src/worker/index.ts).
+# style-src 'unsafe-inline': React-style-Attribute und die von sonner
+# injizierten <style>-Tags; Skripte kommen ausschließlich aus eigenen Dateien.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'

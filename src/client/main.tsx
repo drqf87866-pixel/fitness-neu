@@ -8,6 +8,9 @@ import "./index.css";
 
 registerSW({ immediate: true });
 
+// Unversionierter Katalog-Cache älterer Builds (heute "exercises-api-v1").
+if ("caches" in window) void caches.delete("exercises-cache").catch(() => {});
+
 // Long-Press-Kontextmenü auf Touch-Geräten unterbinden. Rechtsklick mit Maus
 // und Paste/Selektion in Formularfeldern bleiben erhalten.
 document.addEventListener("contextmenu", (event) => {

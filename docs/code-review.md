@@ -15,6 +15,32 @@ miteinander (Queue-PUT, Dirty-Flag in IndexedDB, direkter PUT), und es gibt kein
 
 ---
 
+## Umsetzung (Branch `code-review-fixes`)
+
+Alle Findings aus A und B sind umgesetzt, bis auf die bewusst offenen Punkte unten. Kurzfassung:
+
+- **Sync neu (Phase 1):** Die IDB-Kopie mit `revision` ist die Quelle der Wahrheit. `syncSession()` synchronisiert pro Session
+  single-flight, `pendingComplete` wird erst nach bestätigtem PUT gesendet. Dauerhaft abgelehnte Sessions werden `orphaned`
+  und erscheinen im Profil unter „Sync-Probleme“. Restbestände der alten Queue werden weiter abgearbeitet.
+  Behebt N-K1, H7, N-H1–3, H6, M12, N-M4, N-M5.
+- **Server/Editor (Phase 2):** N-H4, N-H5/N7 (`chunkedInserts`), N-H6, H3/M4, H4/M9, H5, H8, M1–M3, M6–M8, M13, N-M1,
+  N-M6–N-M10, N11, N12, N14 (deutsche Zod-Meldungen).
+- **Rest (Phase 3):** N-M2 (Stepper), N-M3/M11 (Ton/Benachrichtigung), N1–N3, N5, N6, N8–N10, N13, M10 (Bilder nicht mehr
+  im Precache: 562 KiB statt ~7,9 MB), `public/_headers` (CSP u. a.), Bildnachweise, akzentinsensitive Suche, KW in lokaler Zeit.
+
+**Deploy-Hinweis:** Migration `0002` legt einen Unique-Index auf offene Trainings an und schließt vorher doppelte offene
+Trainings (ältere bekommen `completed_at = started_at`). Remote vor dem Deploy ausführen: `pnpm db:migrate:remote`.
+
+**Bewusst offen:**
+- M5: 100.000 PBKDF2-Iterationen sind das Maximum der Workers-Runtime
+- `user-scalable=no`: Trade-off aus `f8e3105`
+- Titel-Snapshot für gelöschte Pläne
+- Sliding-Session
+- Automatisierte Tests. Geprüft wurde manuell: API per `curl` gegen die lokale D1 und die Abläufe per headless Chrome
+  (Sync mit fehlschlagendem PUT, Reconnect, Orphan/Erneut senden, Alt-Queue, Logout, Stepper, Plan-Edit, lbs, CSP im Preview-Build)
+
+---
+
 ## A. Status der Findings vom 09.09.
 
 | # | Status | Anmerkung |

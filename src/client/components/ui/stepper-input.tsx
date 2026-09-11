@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type MouseEvent as ReactMouseEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +46,11 @@ export function StepperInput({
 }: Props) {
   const [draft, setDraft] = useState<string | null>(null);
   const repeat = useRef<{ timeout?: number; interval?: number }>({});
+  // Die Wiederholung beim Gedrückthalten läuft über viele Renders hinweg. Aus
+  // der Render-Closure gelesen, bliebe `value` auf dem Startwert stehen und
+  // jeder Tick setzte denselben Wert – der Knopf zählte nur einmal.
+  const valueRef = useRef(value);
+  valueRef.current = value;
 
   const clamp = useCallback(
     (next: number) => {
@@ -72,19 +77,43 @@ export function StepperInput({
     if (next !== value) onCommit(next);
   };
 
-  const nudge = (direction: 1 | -1) => {
-    const base = draft === null ? value : parse(draft);
+  /** Ein Schritt ab `base`; liefert den neuen Wert (für die Wiederholung). */
+  const nudgeFrom = (base: number, direction: 1 | -1) => {
     const start = Number.isFinite(base) ? base : min;
     const next = clamp(start + direction * step);
+    if (next !== valueRef.current) {
+      valueRef.current = next;
+      onCommit(next);
+    }
+    return next;
+  };
+
+  const nudge = (direction: 1 | -1) => {
+    const base = draft === null ? valueRef.current : parse(draft);
     setDraft(null);
-    if (next !== value) onCommit(next);
+    return nudgeFrom(base, direction);
   };
 
   const startRepeat = (direction: 1 | -1) => {
+    stopRepeat();
     nudge(direction);
     repeat.current.timeout = window.setTimeout(() => {
-      repeat.current.interval = window.setInterval(() => nudge(direction), 90);
+      repeat.current.interval = window.setInterval(() => {
+        const before = valueRef.current;
+        const next = nudgeFrom(before, direction);
+        // Am Anschlag angekommen: Wiederholung beenden. Ein deaktivierter
+        // Knopf bekommt kein pointerup mehr und würde sonst ewig weiterlaufen.
+        if (next === before) stopRepeat();
+      }, 90);
     }, 450);
+  };
+
+  /**
+   * Tastatur (Enter/Leertaste) löst nur click aus, keine Pointer-Events. Solche
+   * Klicks haben `detail === 0`; Maus/Touch wurden schon per pointerdown gezählt.
+   */
+  const onClickStep = (event: ReactMouseEvent, direction: 1 | -1) => {
+    if (event.detail === 0) nudge(direction);
   };
 
   const buttonClass =
@@ -102,6 +131,7 @@ export function StepperInput({
         className={buttonClass}
         disabled={disabled || value <= min}
         aria-label={`${ariaLabel} verringern`}
+        onClick={(event) => onClickStep(event, -1)}
         onPointerDown={() => startRepeat(-1)}
         onPointerUp={stopRepeat}
         onPointerLeave={stopRepeat}
@@ -128,6 +158,7 @@ export function StepperInput({
         className={buttonClass}
         disabled={disabled || value >= max}
         aria-label={`${ariaLabel} erhöhen`}
+        onClick={(event) => onClickStep(event, 1)}
         onPointerDown={() => startRepeat(1)}
         onPointerUp={stopRepeat}
         onPointerLeave={stopRepeat}

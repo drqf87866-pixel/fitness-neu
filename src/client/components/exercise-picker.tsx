@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { Chip } from "@/components/ui/chip";
 import { api } from "@/lib/api";
-import { EQUIPMENT_TAGS, MOVEMENT_TAGS, muscleLabel } from "@/lib/labels";
+import { CATEGORY_LABELS, EQUIPMENT_TAGS, muscleLabel } from "@/lib/labels";
 import { getExerciseThumbnail } from "@/lib/exercise-images";
-import { cn } from "@/lib/utils";
+import { cn, searchKey } from "@/lib/utils";
 import type { Exercise } from "@shared/types";
 
 const PAGE_SIZE = 40;
@@ -79,14 +79,14 @@ export function ExercisePicker({
   const categoryKeys = useMemo(() => {
     const seen = new Set(catalog.map((exercise) => exercise.category));
     return [...seen].sort((a, b) =>
-      (MOVEMENT_TAGS[a] ?? a).localeCompare(MOVEMENT_TAGS[b] ?? b, "de"),
+      (CATEGORY_LABELS[a] ?? a).localeCompare(CATEGORY_LABELS[b] ?? b, "de"),
     );
   }, [catalog]);
 
   const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase();
+    const needle = searchKey(search);
     return catalog.filter((exercise) => {
-      if (needle && !exercise.name.toLowerCase().includes(needle)) return false;
+      if (needle && !searchKey(exercise.name).includes(needle)) return false;
       if (muscle && exercise.primaryMuscle !== muscle) return false;
       if (equipment && exercise.equipment !== equipment) return false;
       if (category && exercise.category !== category) return false;
@@ -176,7 +176,7 @@ export function ExercisePicker({
           </Chip>
           {categoryKeys.map((key) => (
             <Chip key={key} active={category === key} onClick={() => setCategory(key)}>
-              {MOVEMENT_TAGS[key] ?? key}
+              {CATEGORY_LABELS[key] ?? key}
             </Chip>
           ))}
         </div>
@@ -229,7 +229,7 @@ export function ExercisePicker({
                   <p className="truncate text-xs text-muted-foreground">
                     {muscleLabel(exercise.primaryMuscle)} ·{" "}
                     {EQUIPMENT_TAGS[exercise.equipment] ?? exercise.equipment} ·{" "}
-                    {MOVEMENT_TAGS[exercise.category] ?? exercise.category}
+                    {CATEGORY_LABELS[exercise.category] ?? exercise.category}
                   </p>
                 </div>
                 <span

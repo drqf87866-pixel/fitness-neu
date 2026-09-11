@@ -114,7 +114,7 @@ scripts/         # Bild-/Icon-Hilfsskripte (z. B. Download, Icon-Generierung)
 
 ## Hinweise
 
-- **PWA/Offline:** Service Worker cacht nur lesende `GET /api/exercises`-Requests (`NetworkFirst`, 1 h). Auth-, Session- und Analytics-Requests bleiben `NetworkOnly`. Offene Sets werden in IndexedDB (`fitness-neu`) zwischengespeichert und synchronisiert.
+- **PWA/Offline:** Service Worker cacht nur lesende `GET /api/exercises`-Requests (`NetworkFirst`, 1 h, Cache `exercises-api-v1`, wird beim Logout geleert) und Übungsbilder beim ersten Anzeigen (`CacheFirst`, nicht im Precache). Auth-, Session- und Analytics-Requests bleiben `NetworkOnly`. Das laufende Training liegt in IndexedDB (`fitness-neu`) mit einer Revision pro Änderung; `src/client/lib/sync.ts` lädt pro Session immer die neueste Revision hoch und schließt ein Training erst nach bestätigtem Satz-Upload ab. Vom Server dauerhaft abgelehnte Trainings erscheinen im Profil unter „Sync-Probleme“.
 - **Bilder:** Übungsbilder in `public/exercises/` stammen aus zwei Open-Source-Quellen (Fotos aus `yuhonas/free-exercise-db`, Illustrationen aus `@bryllim/workout-guide`/Everkinetic für Übungen ohne Foto-Treffer) — siehe `scripts/` und [CREDITS.md](CREDITS.md) für Details und Lizenzen.
 - **Artefakte:** `dist/`, `.wrangler/` und `node_modules/` werden nicht versioniert.
 

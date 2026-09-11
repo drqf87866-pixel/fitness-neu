@@ -31,6 +31,7 @@ export const MUSCLE_GROUPS = [
   { key: "core", label: "Rumpf", muscles: ["core"] },
 ] as const;
 
+/** Bewegungsmuster (`exercise.category`) – für Filter-Chips und Formulare. */
 export const CATEGORY_LABELS: Record<string, string> = {
   push: "Push",
   pull: "Pull",
@@ -64,14 +65,5 @@ export const EQUIPMENT_TAGS: Record<string, string> = {
   barbell: "Langhantel",
   dumbbell: "Kurzhantel",
   bodyweight: "Körpergewicht",
-  other: "Sonstiges",
-};
-
-export const MOVEMENT_TAGS: Record<string, string> = {
-  push: "Push",
-  pull: "Pull",
-  legs: "Beine",
-  core: "Rumpf",
-  cardio: "Cardio",
   other: "Sonstiges",
 };

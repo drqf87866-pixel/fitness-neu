@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Plus, SkipForward } from "lucide-react";
+import { beep, notify } from "@/lib/alerts";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -11,36 +12,6 @@ type Props = {
   onSkip: () => void;
   onExtend: (deltaSeconds: number) => void;
 };
-
-function beep() {
-  try {
-    const ctx = new AudioContext();
-    void ctx.resume().catch(() => {});
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.frequency.value = 880;
-    gain.gain.value = 0.05;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.2);
-    // Kontext wieder freigeben – sonst sammelt sich pro Satz einer an.
-    osc.onended = () => void ctx.close().catch(() => {});
-  } catch {
-    /* ignore */
-  }
-}
-
-function notify(title: string, body: string) {
-  navigator.vibrate?.([200, 80, 200]);
-  try {
-    if ("Notification" in window && Notification.permission === "granted") {
-      new Notification(title, { body });
-    }
-  } catch {
-    /* Safari wirft hier in manchen Standalone-Kontexten */
-  }
-}
 
 export function RestTimer({ endsAt, total, onDone, onSkip, onExtend }: Props) {
   const [now, setNow] = useState(() => Date.now());

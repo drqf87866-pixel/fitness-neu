@@ -58,11 +58,6 @@ export function WorkoutPage() {
     if (session?.completedAt) navigate(`/sessions/${session.id}`, { replace: true });
   }, [session?.completedAt, session?.id, navigate]);
 
-  useEffect(() => {
-    if (!("Notification" in window) || Notification.permission !== "default") return;
-    void Notification.requestPermission();
-  }, []);
-
   // Mitlaufende Trainingsdauer
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);

@@ -18,7 +18,10 @@ async function clearDeviceData() {
   if ("caches" in window) {
     const keys = await caches.keys().catch(() => [] as string[]);
     await Promise.all(
-      keys.filter((key) => key.startsWith("exercises")).map((key) => caches.delete(key)),
+      keys
+        // "exercises-cache" ist der unversionierte Name älterer Builds.
+        .filter((key) => key.startsWith("exercises-api") || key === "exercises-cache")
+        .map((key) => caches.delete(key)),
     );
   }
 }
