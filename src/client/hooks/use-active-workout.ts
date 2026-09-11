@@ -1,13 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
-import { toSetPayload } from "@/lib/sync";
-import {
-  clearLocalSession,
-  enqueueRequest,
-  loadLocalSession,
-  saveLocalSession,
-} from "@/lib/db";
+import { syncSession, type SyncOutcome } from "@/lib/sync";
+import { loadLocalSession, storeServerSession, writeLocalChange } from "@/lib/db";
 import { useOnline } from "@/hooks/use-online";
 import { displayToKg } from "@/lib/units";
 import type { PreviousSet, SetLog, Unit, WorkoutSession } from "@shared/types";
@@ -30,8 +25,13 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
   const [previous, setPrevious] = useState<PreviousSet[]>([]);
   const [rest, setRest] = useState<RestState>({ endsAt: null, total: DEFAULT_REST_SECONDS });
   const [loadFailed, setLoadFailed] = useState(false);
+  /** Server lehnt die Session dauerhaft ab – Eingaben würden nie ankommen. */
+  const [orphaned, setOrphaned] = useState(false);
   const online = useOnline();
   const timer = useRef<number | null>(null);
+  const pending = useRef<{ next: WorkoutSession; prev: PreviousSet[] } | null>(null);
+  /** Zählt lokale Änderungen – erkennt Eingaben, die während des Ladens passiert sind. */
+  const editCount = useRef(0);
   const sessionRef = useRef<WorkoutSession | null>(null);
   const previousRef = useRef<PreviousSet[]>([]);
 
@@ -43,48 +43,80 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
     previousRef.current = previous;
   }, [previous]);
 
-  useEffect(() => {
-    return () => {
-      if (timer.current) window.clearTimeout(timer.current);
-    };
+  /**
+   * Erst lokal mit neuer Revision festschreiben (dirty), dann hochladen. Der
+   * Sync markiert die Kopie nur als sauber, wenn inzwischen nichts Neueres
+   * gespeichert wurde – Abbrüche mitten im Upload verlieren so nichts.
+   */
+  const persist = useCallback(async (next: WorkoutSession, prev: PreviousSet[]) => {
+    await writeLocalChange(next, prev);
+    if (navigator.onLine) void syncSession(next.id);
   }, []);
 
-  const persist = useCallback(
-    async (next: WorkoutSession, prev: PreviousSet[], remote: boolean) => {
-      await saveLocalSession(next, prev, !remote);
-      if (!remote) return;
-      const body = { sets: toSetPayload(next.sets) };
-      try {
-        await api(`/api/sessions/${next.id}/sets`, {
-          method: "PUT",
-          body: JSON.stringify(body),
-        });
-        await saveLocalSession(next, prev, false);
-      } catch {
-        await enqueueRequest("PUT", `/api/sessions/${next.id}/sets`, body);
-      }
-    },
-    [],
-  );
+  /** Gepufferte Änderung sofort schreiben (Unmount, App in den Hintergrund, Beenden). */
+  const flushPending = useCallback(async () => {
+    if (timer.current) {
+      window.clearTimeout(timer.current);
+      timer.current = null;
+    }
+    const job = pending.current;
+    pending.current = null;
+    if (job) await persist(job.next, job.prev);
+  }, [persist]);
+
+  useEffect(() => {
+    // Beim Wegwischen der App oder Tab-Wechsel nicht auf den Debounce warten:
+    // danach kann der Prozess jederzeit beendet werden.
+    const onHide = () => {
+      if (document.visibilityState === "hidden") void flushPending();
+    };
+    const onPageHide = () => void flushPending();
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", onPageHide);
+      // Verlassen der Seite (z. B. "X") innerhalb des Debounce-Fensters.
+      void flushPending();
+    };
+  }, [flushPending]);
 
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
     setLoadFailed(false);
+    setOrphaned(false);
+    const editsAtStart = editCount.current;
     (async () => {
       const local = await loadLocalSession(sessionId);
-      if (local && !cancelled) {
+      if (cancelled) return;
+      if (local) {
         setSession(local.session);
         setPrevious(local.previous);
+        if (local.orphaned) {
+          setOrphaned(true);
+          return;
+        }
       }
       try {
-        const remote = await api<{ session: WorkoutSession }>(`/api/sessions/${sessionId}`);
-        const prevRes = await api<{ previous: PreviousSet[] }>(`/api/sessions/${sessionId}/previous`);
+        const [remote, prevRes] = await Promise.all([
+          api<{ session: WorkoutSession }>(`/api/sessions/${sessionId}`),
+          api<{ previous: PreviousSet[] }>(`/api/sessions/${sessionId}/previous`),
+        ]);
         if (cancelled) return;
-        const merged = local?.dirty ? local.session : remote.session;
-        setSession(merged);
         setPrevious(prevRes.previous);
-        await saveLocalSession(merged, prevRes.previous, Boolean(local?.dirty));
+        // Während des Requests getippte Änderungen haben Vorrang vor dem Serverstand.
+        if (editCount.current !== editsAtStart) return;
+        const stored = await storeServerSession(remote.session, prevRes.previous);
+        if (cancelled || editCount.current !== editsAtStart) return;
+        if (stored) {
+          setSession(remote.session);
+        } else {
+          // Ungesicherte lokale Kopie gewinnt – frisch lesen, der Stand kann neuer sein.
+          const fresh = await loadLocalSession(sessionId);
+          if (!cancelled && fresh && editCount.current === editsAtStart) setSession(fresh.session);
+          if (navigator.onLine) void syncSession(sessionId);
+        }
       } catch {
         if (cancelled) return;
         if (!local) {
@@ -100,12 +132,13 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
 
   const schedulePersist = useCallback(
     (next: WorkoutSession, prev: PreviousSet[]) => {
+      pending.current = { next, prev };
       if (timer.current) window.clearTimeout(timer.current);
       timer.current = window.setTimeout(() => {
-        void persist(next, prev, navigator.onLine);
+        void flushPending();
       }, 400);
     },
-    [persist],
+    [flushPending],
   );
 
   /** Gemeinsamer Pfad für alle Satz-Mutationen: State setzen und gepuffert speichern. */
@@ -115,6 +148,7 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
       if (!current) return;
       const next = update(current);
       if (next === current) return;
+      editCount.current += 1;
       sessionRef.current = next;
       setSession(next);
       schedulePersist(next, previousRef.current);
@@ -273,6 +307,9 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
                   exerciseId: replacement.exerciseId,
                   name: replacement.name,
                   primaryMuscle: replacement.primaryMuscle,
+                  // Vorgaben der alten Übung passen nicht zur neuen.
+                  targetReps: null,
+                  suggestedWeight: null,
                 }
               : ex,
           ),
@@ -327,34 +364,27 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
     [mutateSession],
   );
 
+  /**
+   * Abschluss wird zusammen mit dem letzten Satzstand lokal festgeschrieben.
+   * Der Sync lädt erst die Sätze hoch und schließt nur nach bestätigtem Upload
+   * ab – ein fehlgeschlagener PUT kann das Training so nie leer abschließen.
+   */
   const completeWorkout = useCallback(
-    async (notes?: string) => {
+    async (notes?: string): Promise<SyncOutcome> => {
       const current = sessionRef.current;
-      if (!current) return;
-      const prev = previousRef.current;
-      const payload = { completedAt: Date.now(), notes: notes ?? current.notes };
-      try {
-        if (navigator.onLine) {
-          await persist(current, prev, true);
-          await api(`/api/sessions/${current.id}`, {
-            method: "PATCH",
-            body: JSON.stringify(payload),
-          });
-        } else {
-          // Offline: PUT in die Queue legen (enthält die Sätze), dann PATCH.
-          // Erst danach die lokale Kopie löschen – sonst gehen Sätze verloren.
-          await enqueueRequest("PUT", `/api/sessions/${current.id}/sets`, {
-            sets: toSetPayload(current.sets),
-          });
-          await enqueueRequest("PATCH", `/api/sessions/${current.id}`, payload);
-        }
-        await clearLocalSession(current.id);
-      } catch {
-        await enqueueRequest("PATCH", `/api/sessions/${current.id}`, payload);
-        toast.message("Workout lokal gespeichert, Sync folgt online.");
-      }
+      if (!current) return "pending";
+      // Der gepufferte Stand ist mit `current` identisch und wird hier ersetzt.
+      if (timer.current) window.clearTimeout(timer.current);
+      timer.current = null;
+      pending.current = null;
+      await writeLocalChange(current, previousRef.current, {
+        completedAt: Date.now(),
+        notes: notes !== undefined ? notes.trim() || null : current.notes,
+      });
+      if (!navigator.onLine) return "pending";
+      return syncSession(current.id);
     },
-    [persist],
+    [],
   );
 
   const grouped = useMemo(() => {
@@ -392,6 +422,7 @@ export function useActiveWorkout(sessionId: string | undefined, unit: Unit) {
     rest,
     offline: !online,
     loadFailed,
+    orphaned,
     updateSet,
     toggleSet,
     addSet,

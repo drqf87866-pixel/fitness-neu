@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { Check, ChevronDown, Flag, Minus, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { ExercisePicker } from "@/components/exercise-picker";
@@ -19,6 +19,7 @@ import { useAuthQuery } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { muscleLabel } from "@/lib/labels";
 import { getExerciseThumbnail } from "@/lib/exercise-images";
+import { invalidateTrainingQueries } from "@/lib/query-client";
 import { kgToDisplay, unitLabel } from "@/lib/units";
 import { cn, formatDuration, formatStopwatch } from "@/lib/utils";
 import type { Exercise } from "@shared/types";
@@ -26,7 +27,6 @@ import type { Exercise } from "@shared/types";
 export function WorkoutPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const confirm = useConfirm();
   const me = useAuthQuery();
   const unit = me.data?.user.unit ?? "kg";
@@ -92,6 +92,20 @@ export function WorkoutPage() {
     onError: (error) => toast.error(error.message),
   });
 
+  if (workout.orphaned) {
+    return (
+      <div className="flex flex-col items-center gap-4 px-2 py-20 text-center pt-safe">
+        <p className="text-sm text-muted-foreground">
+          Dieses Training konnte nicht mit dem Server abgeglichen werden. Die Daten liegen
+          weiterhin auf diesem Gerät – Details im Profil unter „Sync-Probleme“.
+        </p>
+        <Button variant="secondary" onClick={() => navigate("/profile")}>
+          Zum Profil
+        </Button>
+      </div>
+    );
+  }
+
   if (!session) {
     return (
       <div className="grid gap-3 pt-safe">
@@ -135,7 +149,8 @@ export function WorkoutPage() {
           </p>
           {open > 0 ? (
             <p className="text-amber-300">
-              {open} Satz{open !== 1 ? "" : ""} noch offen – wird als nicht ausgeführt gespeichert.
+              {open} {open === 1 ? "Satz" : "Sätze"} noch offen – wird als nicht ausgeführt
+              gespeichert.
             </p>
           ) : null}
         </div>
@@ -147,16 +162,22 @@ export function WorkoutPage() {
 
     setFinishing(true);
     try {
-      await workout.completeWorkout(notes);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] }),
-        queryClient.invalidateQueries({ queryKey: ["sessions"] }),
-        queryClient.invalidateQueries({ queryKey: ["session-open"] }),
-        queryClient.invalidateQueries({ queryKey: ["prs"] }),
-        queryClient.invalidateQueries({ queryKey: ["volume"] }),
-      ]);
-      toast.success("Workout gespeichert");
-      navigate(`/sessions/${session!.id}`, { replace: true });
+      const outcome = await workout.completeWorkout(notes);
+      if (outcome === "completed") {
+        await invalidateTrainingQueries();
+        toast.success("Workout gespeichert");
+        navigate(`/sessions/${session!.id}`, { replace: true });
+      } else if (outcome === "orphaned") {
+        // Der Sync hat bereits erklärt, warum; die Daten bleiben lokal.
+        navigate("/profile", { replace: true });
+      } else {
+        // Offline oder Server nicht erreichbar: Die Detailansicht könnte das
+        // Training noch nicht laden – deshalb zurück zum Start.
+        toast.message("Workout lokal gespeichert", {
+          description: "Es wird übertragen, sobald wieder eine Verbindung besteht.",
+        });
+        navigate("/", { replace: true });
+      }
     } finally {
       setFinishing(false);
     }

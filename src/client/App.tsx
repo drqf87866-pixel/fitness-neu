@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import {
   Navigate,
   Outlet,
@@ -13,6 +13,7 @@ import { AppLayout } from "@/components/layout";
 import { ConfirmProvider } from "@/components/ui/confirm";
 import { useAuthQuery } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
+import { queryClient } from "@/lib/query-client";
 import { AnalyticsPage } from "@/pages/analytics";
 import { DashboardPage } from "@/pages/dashboard";
 import { ExercisesPage } from "@/pages/exercises";
@@ -26,15 +27,6 @@ import { ProfilePage } from "@/pages/profile";
 import { RegisterPage } from "@/pages/register";
 import { SessionDetailPage } from "@/pages/session-detail";
 import { WorkoutPage } from "@/pages/workout";
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: (failureCount, error) =>
-        error instanceof ApiError ? error.status >= 500 && failureCount < 2 : failureCount < 1,
-    },
-  },
-});
 
 /** Hält den Toast über der Bottom-Navigation (56px hohe Zeile + Abstand). */
 const TOAST_OFFSET = {

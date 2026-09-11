@@ -2,32 +2,30 @@ import { toast } from "sonner";
 import { ApiError, api } from "./api";
 import {
   clearLocalSession,
-  loadDirtySessions,
+  loadLocalSession,
+  loadLocalSessions,
+  markOrphaned,
+  markSynced,
   readQueue,
   removeQueued,
-  saveLocalSession,
-  type DirtySessionEntry,
   type QueuedRequest,
 } from "./db";
+import { invalidateTrainingQueries, queryClient } from "./query-client";
 import type { SetLog } from "@shared/types";
 
 /**
  * Statuscodes, bei denen dieselbe Anfrage auch später nie durchgeht:
- * ungültige Payload, oder Session bereits abgeschlossen (409).
- * 404 auf PUT /sets wird NICHT als permanent behandelt: die Server-Session
- * könnte zwischenzeitlich gelöscht worden sein, aber die lokalen Sätze
- * sollen nicht verworfen werden – sie werden als Dead-Letter gesichert.
- * Solche Einträge werden verworfen, statt die Queue dauerhaft zu blockieren.
+ * ungültige Payload, Session weg (404) oder bereits abgeschlossen (409).
+ * 401/403 (nach erneutem Login klappt es wieder), 408 und 429 sind vorübergehend.
  */
-function isPermanentFailure(error: unknown): boolean {
+function isPermanentFailure(error: unknown): error is ApiError {
   if (!(error instanceof ApiError)) return false;
-  // 401/403 sind vorübergehend: nach erneutem Login klappt der Sync wieder.
   if (error.status === 401 || error.status === 403) return false;
   if (error.status === 408 || error.status === 429) return false;
   return error.status >= 400 && error.status < 500;
 }
 
-/** Einheitliches PUT-Format für Sätze (vgl. use-active-workout persist). */
+/** Einheitliches PUT-Format für Sätze. */
 export function toSetPayload(sets: SetLog[]) {
   return sets.map((set) => ({
     id: set.id,
@@ -39,9 +37,13 @@ export function toSetPayload(sets: SetLog[]) {
   }));
 }
 
+// ---------------------------------------------------------------------------
+// Dead-Letters: verworfene Einträge der Alt-Queue (vor dem Revisions-Sync).
+// ---------------------------------------------------------------------------
+
 const DEAD_LETTER_KEY = "fitness-neu:sync-dead";
 
-type DeadLetterEntry = {
+export type DeadLetterEntry = {
   id: string;
   method: string;
   path: string;
@@ -50,37 +52,177 @@ type DeadLetterEntry = {
   at: number;
 };
 
-function pushDeadLetter(entry: Omit<DeadLetterEntry, "id" | "at">) {
+export function readDeadLetters(): DeadLetterEntry[] {
   try {
     const raw = localStorage.getItem(DEAD_LETTER_KEY);
-    const list = raw ? (JSON.parse(raw) as DeadLetterEntry[]) : [];
-    list.push({
-      ...entry,
-      id: crypto.randomUUID(),
-      at: Date.now(),
-    });
-    localStorage.setItem(DEAD_LETTER_KEY, JSON.stringify(list.slice(-50)));
+    return raw ? (JSON.parse(raw) as DeadLetterEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeDeadLetters(list: DeadLetterEntry[]) {
+  try {
+    if (list.length) localStorage.setItem(DEAD_LETTER_KEY, JSON.stringify(list.slice(-50)));
+    else localStorage.removeItem(DEAD_LETTER_KEY);
   } catch {
     /* localStorage nicht verfügbar (privater Modus) – Sync trotzdem fortsetzen */
   }
 }
 
-function notifyPermanentFailure(label: string, error: unknown) {
-  const status = error instanceof ApiError ? error.status : null;
-  const message = error instanceof Error ? error.message : "Sync fehlgeschlagen";
-  pushDeadLetter({ method: label.split(" ")[0] ?? "", path: label, status, message });
-  toast.error(`Sync verworfen (${status ?? "?"}): ${label} – ${message}`);
+export function removeDeadLetter(id: string) {
+  writeDeadLetters(readDeadLetters().filter((entry) => entry.id !== id));
+  void queryClient.invalidateQueries({ queryKey: ["sync-problems"] });
 }
+
+export function clearDeadLetters() {
+  writeDeadLetters([]);
+  void queryClient.invalidateQueries({ queryKey: ["sync-problems"] });
+}
+
+function pushDeadLetter(item: QueuedRequest, error: ApiError) {
+  writeDeadLetters([
+    ...readDeadLetters(),
+    {
+      id: crypto.randomUUID(),
+      method: item.method,
+      path: item.path,
+      status: error.status,
+      message: error.message,
+      at: Date.now(),
+    },
+  ]);
+  void queryClient.invalidateQueries({ queryKey: ["sync-problems"] });
+}
+
+// ---------------------------------------------------------------------------
+// Session-Sync: pro Session genau ein Lauf gleichzeitig.
+// ---------------------------------------------------------------------------
+
+/**
+ * - `synced`: Server hat die neueste lokale Revision
+ * - `completed`: Sätze übertragen und Training abgeschlossen, lokale Kopie entfernt
+ * - `pending`: vorübergehender Fehler, nächster Versuch beim nächsten Sync
+ * - `orphaned`: Server lehnt dauerhaft ab, Daten bleiben lokal (Profil → Sync-Probleme)
+ */
+export type SyncOutcome = "synced" | "completed" | "pending" | "orphaned";
+
+async function orphan(id: string, error: ApiError) {
+  await markOrphaned(id, error.status, error.message);
+  toast.error(`Training konnte nicht synchronisiert werden (${error.status}): ${error.message}`, {
+    description: "Die Daten bleiben auf dem Gerät – Details im Profil unter „Sync-Probleme“.",
+  });
+  void queryClient.invalidateQueries({ queryKey: ["sync-problems"] });
+}
+
+async function runSync(id: string): Promise<SyncOutcome> {
+  // Schleife: kam während des Uploads eine neuere Revision hinzu, wird sie
+  // direkt nachgeschoben – der Server endet so immer auf dem neuesten Stand.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const entry = await loadLocalSession(id);
+    if (!entry) return "synced";
+    if (entry.orphaned) return "orphaned";
+
+    if (entry.dirty) {
+      try {
+        await api(`/api/sessions/${id}/sets`, {
+          method: "PUT",
+          body: JSON.stringify({ sets: toSetPayload(entry.session.sets) }),
+        });
+      } catch (error) {
+        if (isPermanentFailure(error)) {
+          await orphan(id, error);
+          return "orphaned";
+        }
+        return "pending";
+      }
+      const clean = await markSynced(id, entry.revision);
+      if (!clean) continue;
+    }
+
+    if (!entry.pendingComplete) return "synced";
+
+    // Abschluss erst, nachdem die Sätze nachweislich auf dem Server sind –
+    // sonst lehnt der Server einen späteren PUT mit 409 ab.
+    try {
+      await api(`/api/sessions/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(entry.pendingComplete),
+      });
+    } catch (error) {
+      if (isPermanentFailure(error)) {
+        await orphan(id, error);
+        return "orphaned";
+      }
+      return "pending";
+    }
+    await clearLocalSession(id, entry.revision);
+    void invalidateTrainingQueries();
+    return "completed";
+  }
+  return "pending";
+}
+
+const running = new Map<string, Promise<SyncOutcome>>();
+const rerun = new Set<string>();
+
+/**
+ * Synchronisiert eine Session. Läuft bereits ein Sync für sie, hängt der
+ * laufende Sync genau eine weitere Runde an, und alle Aufrufer der
+ * Zwischenzeit teilen sich dieses Ergebnis. Wirft nie.
+ */
+export function syncSession(id: string): Promise<SyncOutcome> {
+  const current = running.get(id);
+  if (current) {
+    rerun.add(id);
+    return current;
+  }
+  const promise = (async () => {
+    try {
+      let outcome: SyncOutcome;
+      do {
+        rerun.delete(id);
+        outcome = await runSync(id);
+      } while (rerun.has(id) && outcome === "synced");
+      return outcome;
+    } catch {
+      return "pending" as const;
+    } finally {
+      running.delete(id);
+    }
+  })();
+  running.set(id, promise);
+  return promise;
+}
+
+// ---------------------------------------------------------------------------
+// Voller Sync beim Start und bei Wiederverbindung.
+// ---------------------------------------------------------------------------
 
 function isSetsPut(item: QueuedRequest): boolean {
   return item.method === "PUT" && item.path.includes("/sets");
 }
 
-async function sendQueued(item: QueuedRequest) {
-  await api(item.path, {
-    method: item.method,
-    body: item.body == null ? undefined : JSON.stringify(item.body),
-  });
+/** Alt-Queue in Reihenfolge abarbeiten. false = vorübergehender Fehler, abbrechen. */
+async function sendLegacy(items: QueuedRequest[]): Promise<boolean> {
+  for (const item of items) {
+    try {
+      await api(item.path, {
+        method: item.method,
+        body: item.body == null ? undefined : JSON.stringify(item.body),
+      });
+      await removeQueued(item.id);
+    } catch (error) {
+      if (isPermanentFailure(error)) {
+        await removeQueued(item.id);
+        pushDeadLetter(item, error);
+        toast.error(`Sync verworfen (${error.status}): ${item.method} ${item.path} – ${error.message}`);
+        continue;
+      }
+      return false;
+    }
+  }
+  return true;
 }
 
 let flushing = false;
@@ -89,81 +231,22 @@ export async function flushOfflineQueue() {
   if (flushing || !navigator.onLine) return;
   flushing = true;
   try {
-    const queue = await readQueue();
-    const queuedPuts = queue.filter(isSetsPut);
-    const queuedRest = queue.filter((item) => !isSetsPut(item));
+    // Restbestände der alten Queue: PUTs vor allem anderen, damit ein
+    // gequeueter Abschluss nie vor den zugehörigen Sätzen ankommt.
+    const legacy = await readQueue();
+    const legacyPuts = legacy.filter(isSetsPut);
+    const legacyRest = legacy.filter((item) => !isSetsPut(item));
+    if (!(await sendLegacy(legacyPuts))) return;
 
-    const dirtyAll = await loadDirtySessions();
-    const dirty = dirtyAll.filter((entry) => entry.dirty);
-
-    // PUTs (Queue + Dirty) in chronologischer Reihenfolge, damit PUT sets
-    // immer vor einem späteren PATCH complete derselben Session läuft.
-    type PutOp =
-      | { ts: number; kind: "queue"; item: QueuedRequest }
-      | { ts: number; kind: "dirty"; entry: DirtySessionEntry };
-    const putOps: PutOp[] = [
-      ...queuedPuts.map((item): PutOp => ({ ts: item.createdAt, kind: "queue", item })),
-      ...dirty.map((entry): PutOp => ({ ts: entry.updatedAt, kind: "dirty", entry })),
-    ].sort((a, b) => a.ts - b.ts);
-
-    for (const op of putOps) {
-      if (op.kind === "queue") {
-        const label = `${op.item.method} ${op.item.path}`;
-        try {
-          await sendQueued(op.item);
-          await removeQueued(op.item.id);
-        } catch (error) {
-          if (isPermanentFailure(error)) {
-            await removeQueued(op.item.id);
-            notifyPermanentFailure(label, error);
-            continue;
-          }
-          break;
-        }
-      } else {
-        const path = `/api/sessions/${op.entry.session.id}/sets`;
-        try {
-          await api(path, {
-            method: "PUT",
-            body: JSON.stringify({ sets: toSetPayload(op.entry.session.sets) }),
-          });
-          await saveLocalSession(op.entry.session, op.entry.previous, false);
-        } catch (error) {
-          if (isPermanentFailure(error)) {
-            const status = error instanceof ApiError ? error.status : 0;
-            if (status === 404) {
-              // Server-Session existiert nicht mehr (z. B. auf anderem Gerät
-              // gelöscht). Lokale Kopie NICHT löschen – die Sätze wären sonst
-              // unwiederbringlich verloren. Stattdessen als Dead-Letter sichern.
-              notifyPermanentFailure(`PUT ${path}`, error);
-              continue;
-            }
-            // Andere permanente Fehler (z. B. 409 bereits abgeschlossen):
-            // lokale Kopie aufräumen, sonst wird sie bei jedem Sync abgelehnt.
-            await clearLocalSession(op.entry.session.id);
-            notifyPermanentFailure(`PUT ${path}`, error);
-            continue;
-          }
-          break;
-        }
-      }
+    const entries = await loadLocalSessions();
+    for (const entry of entries) {
+      if (entry.orphaned || (!entry.dirty && !entry.pendingComplete)) continue;
+      const outcome = await syncSession(entry.session.id);
+      if (outcome === "pending") return;
     }
 
-    // Restliche Queue (v. a. PATCH complete) erst nach allen PUTs.
-    for (const item of queuedRest) {
-      const label = `${item.method} ${item.path}`;
-      try {
-        await sendQueued(item);
-        await removeQueued(item.id);
-      } catch (error) {
-        if (isPermanentFailure(error)) {
-          await removeQueued(item.id);
-          notifyPermanentFailure(label, error);
-          continue;
-        }
-        break;
-      }
-    }
+    if (!(await sendLegacy(legacyRest))) return;
+    if (legacy.length) void invalidateTrainingQueries();
   } finally {
     flushing = false;
   }
