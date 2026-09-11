@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 import { Play, Plus } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
+import { useStartWorkout } from "@/hooks/use-start-workout";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { WorkoutPlan, WorkoutSession } from "@shared/types";
@@ -17,7 +17,6 @@ import type { WorkoutPlan, WorkoutSession } from "@shared/types";
  */
 export function QuickStartButton({ className }: { className?: string }) {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
 
   const openSession = useQuery({
@@ -31,19 +30,7 @@ export function QuickStartButton({ className }: { className?: string }) {
     enabled: open,
   });
 
-  const start = useMutation({
-    mutationFn: (planId: string | null) =>
-      api<{ session: WorkoutSession }>("/api/sessions", {
-        method: "POST",
-        body: JSON.stringify({ planId }),
-      }),
-    onSuccess: (data) => {
-      void queryClient.invalidateQueries({ queryKey: ["session-open"] });
-      setOpen(false);
-      navigate(`/workout/${data.session.id}`);
-    },
-    onError: (error) => toast.error(error.message),
-  });
+  const start = useStartWorkout(() => setOpen(false));
 
   const running = openSession.data?.session ?? null;
 

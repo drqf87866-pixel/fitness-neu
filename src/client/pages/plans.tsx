@@ -8,8 +8,9 @@ import { Card, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Sheet } from "@/components/ui/sheet";
 import { useConfirm } from "@/components/ui/confirm";
+import { useStartWorkout } from "@/hooks/use-start-workout";
 import { api } from "@/lib/api";
-import type { WorkoutPlan, WorkoutSession } from "@shared/types";
+import type { WorkoutPlan } from "@shared/types";
 
 export function PlansPage() {
   const navigate = useNavigate();
@@ -24,18 +25,7 @@ export function PlansPage() {
     queryFn: () => api<{ plans: WorkoutPlan[] }>("/api/plans"),
   });
 
-  const start = useMutation({
-    mutationFn: (planId: string) =>
-      api<{ session: WorkoutSession }>("/api/sessions", {
-        method: "POST",
-        body: JSON.stringify({ planId }),
-      }),
-    onSuccess: (data) => {
-      void queryClient.invalidateQueries({ queryKey: ["session-open"] });
-      navigate(`/workout/${data.session.id}`);
-    },
-    onError: (error) => toast.error(error.message),
-  });
+  const start = useStartWorkout();
 
   const remove = useMutation({
     mutationFn: (id: string) => api(`/api/plans/${id}`, { method: "DELETE" }),

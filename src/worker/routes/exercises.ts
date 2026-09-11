@@ -3,7 +3,7 @@ import { and, eq, or } from "drizzle-orm";
 import { exercises, planExercises, setLogs } from "../../db/schema";
 import { exerciseCreateSchema, exerciseUpdateSchema } from "../../shared/schemas";
 import type { AppEnv } from "../env";
-import { dbFrom, toExercise } from "../lib/helpers";
+import { dbFrom, definedFields, toExercise } from "../lib/helpers";
 import { parseJson } from "../lib/parse";
 
 export const exerciseRoutes = new Hono<AppEnv>();
@@ -50,18 +50,20 @@ exerciseRoutes.patch("/:id", async (c) => {
     return c.json({ error: "Nur eigene Übungen können geändert werden" }, 403);
   }
 
-  await db
-    .update(exercises)
-    .set({
-      ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
-      ...(parsed.data.category !== undefined ? { category: parsed.data.category } : {}),
-      ...(parsed.data.primaryMuscle !== undefined ? { primaryMuscle: parsed.data.primaryMuscle } : {}),
-      ...(parsed.data.secondaryMuscles !== undefined
-        ? { secondaryMuscles: JSON.stringify(parsed.data.secondaryMuscles) }
-        : {}),
-      ...(parsed.data.equipment !== undefined ? { equipment: parsed.data.equipment } : {}),
-    })
-    .where(and(eq(exercises.id, id), eq(exercises.userId, c.get("userId"))));
+  const update = definedFields({
+    name: parsed.data.name,
+    category: parsed.data.category,
+    primaryMuscle: parsed.data.primaryMuscle,
+    secondaryMuscles:
+      parsed.data.secondaryMuscles !== undefined ? JSON.stringify(parsed.data.secondaryMuscles) : undefined,
+    equipment: parsed.data.equipment,
+  });
+  if (Object.keys(update).length) {
+    await db
+      .update(exercises)
+      .set(update)
+      .where(and(eq(exercises.id, id), eq(exercises.userId, c.get("userId"))));
+  }
 
   const [row] = await db.select().from(exercises).where(eq(exercises.id, id)).limit(1);
   return c.json({ exercise: toExercise(row!) });

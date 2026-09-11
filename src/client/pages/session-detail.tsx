@@ -1,8 +1,8 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useNavigate, useParams } from "react-router";
+import { useQuery } from "@tanstack/react-query";
+import { Navigate, useNavigate, useParams } from "react-router";
 import { ArrowLeft, Play } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useStartWorkout } from "@/hooks/use-start-workout";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
@@ -29,15 +29,7 @@ export function SessionDetailPage() {
     enabled: Boolean(id),
   });
 
-  const restart = useMutation({
-    mutationFn: (planId: string | null) =>
-      api<{ session: WorkoutSession }>("/api/sessions", {
-        method: "POST",
-        body: JSON.stringify({ planId }),
-      }),
-    onSuccess: (data) => navigate(`/workout/${data.session.id}`),
-    onError: (error) => toast.error(error.message),
-  });
+  const restart = useStartWorkout();
 
   const session = query.data?.session;
 
@@ -63,10 +55,7 @@ export function SessionDetailPage() {
   }
 
   // Eine noch offene Session gehört in die Live-Ansicht, nicht hierher.
-  if (!session.completedAt) {
-    navigate(`/workout/${session.id}`, { replace: true });
-    return null;
-  }
+  if (!session.completedAt) return <Navigate to={`/workout/${session.id}`} replace />;
 
   const completedSets = session.sets.filter((set) => set.isCompleted);
   const volumeKg = completedSets.reduce((sum, set) => sum + set.weight * set.reps, 0);

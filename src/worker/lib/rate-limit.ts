@@ -1,40 +1,35 @@
-import { eq } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { rateLimits } from "../../db/schema";
-import type { dbFrom } from "./helpers";
+import type { Database } from "../../db/client";
 
+/**
+ * Zählt einen Versuch und meldet, ob er innerhalb des Limits liegt.
+ *
+ * Ein einziger Upsert statt SELECT + UPDATE: parallele Requests können sonst
+ * beide `count < limit` lesen und gemeinsam durchrutschen. Abgelaufene Fenster
+ * beginnen im selben Statement neu (SQLite wertet alle SET-Ausdrücke mit den
+ * alten Zeilenwerten aus).
+ */
 export async function consumeRateLimit(
-  db: ReturnType<typeof dbFrom>,
+  db: Database,
   key: string,
   limit: number,
   windowSec: number,
 ): Promise<boolean> {
-  const expiresAt = Date.now() + windowSec * 1000;
-
-  const existing = await db
-    .select({ count: rateLimits.count, expiresAt: rateLimits.expiresAt })
-    .from(rateLimits)
-    .where(eq(rateLimits.key, key))
-    .limit(1);
-
-  if (existing.length > 0) {
-    const row = existing[0];
-    if (row.expiresAt < Date.now()) {
-      await db
-        .update(rateLimits)
-        .set({ count: 1, expiresAt })
-        .where(eq(rateLimits.key, key));
-      return true;
-    }
-    if (row.count >= limit) return false;
-    await db
-      .update(rateLimits)
-      .set({ count: row.count + 1 })
-      .where(eq(rateLimits.key, key));
-    return true;
-  }
-
-  await db.insert(rateLimits).values({ key, count: 1, expiresAt });
-  return true;
+  const now = Date.now();
+  const expiresAt = now + windowSec * 1000;
+  const [row] = await db
+    .insert(rateLimits)
+    .values({ key, count: 1, expiresAt })
+    .onConflictDoUpdate({
+      target: rateLimits.key,
+      set: {
+        count: sql`CASE WHEN ${rateLimits.expiresAt} < ${now} THEN 1 ELSE ${rateLimits.count} + 1 END`,
+        expiresAt: sql`CASE WHEN ${rateLimits.expiresAt} < ${now} THEN ${expiresAt} ELSE ${rateLimits.expiresAt} END`,
+      },
+    })
+    .returning({ count: rateLimits.count });
+  return (row?.count ?? 1) <= limit;
 }
 
 export function clientIp(request: Request): string {

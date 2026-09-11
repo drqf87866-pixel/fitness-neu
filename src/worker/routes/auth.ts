@@ -4,9 +4,9 @@ import { eq } from "drizzle-orm";
 import { users } from "../../db/schema";
 import { loginSchema, registerSchema } from "../../shared/schemas";
 import type { AppEnv } from "../env";
-import { dbFrom, toProfile } from "../lib/helpers";
+import { dbFrom, isUniqueViolation, toProfile } from "../lib/helpers";
 import { parseJson } from "../lib/parse";
-import { hashPassword, verifyPassword } from "../lib/password";
+import { burnPasswordCheck, hashPassword, verifyPassword } from "../lib/password";
 import { clientIp, consumeRateLimit } from "../lib/rate-limit";
 import {
   clearSessionCookie,
@@ -18,7 +18,7 @@ import {
 
 export const authRoutes = new Hono<AppEnv>();
 
-function isSecure(c: { req: { url: string } }) {
+export function isSecure(c: { req: { url: string } }) {
   return new URL(c.req.url).protocol === "https:";
 }
 
@@ -31,17 +31,24 @@ authRoutes.post("/register", async (c) => {
   if (!parsed.success) return c.json({ error: parsed.error }, 400);
 
   const email = parsed.data.email.toLowerCase();
+  const alreadyRegistered = c.json({ error: "E-Mail ist bereits registriert" }, 409);
   const existing = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
-  if (existing.length) return c.json({ error: "E-Mail ist bereits registriert" }, 409);
+  if (existing.length) return alreadyRegistered;
 
   const id = crypto.randomUUID();
-  await db.insert(users).values({
-    id,
-    email,
-    name: parsed.data.name,
-    passwordHash: await hashPassword(parsed.data.password),
-    createdAt: Date.now(),
-  });
+  try {
+    await db.insert(users).values({
+      id,
+      email,
+      name: parsed.data.name,
+      passwordHash: await hashPassword(parsed.data.password),
+      createdAt: Date.now(),
+    });
+  } catch (error) {
+    // Parallele Registrierung derselben Adresse: Unique-Index statt 500.
+    if (isUniqueViolation(error)) return alreadyRegistered;
+    throw error;
+  }
 
   const token = await createSessionToken(db, id);
   c.header("Set-Cookie", sessionCookie(token, isSecure(c)));
@@ -58,7 +65,10 @@ authRoutes.post("/login", async (c) => {
   if (!parsed.success) return c.json({ error: parsed.error }, 400);
 
   const [user] = await db.select().from(users).where(eq(users.email, parsed.data.email.toLowerCase())).limit(1);
-  if (!user || !(await verifyPassword(parsed.data.password, user.passwordHash))) {
+  const valid = user
+    ? await verifyPassword(parsed.data.password, user.passwordHash)
+    : await burnPasswordCheck(parsed.data.password);
+  if (!user || !valid) {
     return c.json({ error: "E-Mail oder Passwort ist falsch" }, 401);
   }
 

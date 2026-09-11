@@ -15,6 +15,13 @@
       "when": 1788858448450,
       "tag": "0001_pink_captain_flint",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789105546986,
+      "tag": "0002_pretty_redwing",
+      "breakpoints": true
     }
   ]
 }

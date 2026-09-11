@@ -1,12 +1,17 @@
 import { Hono } from "hono";
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { planExercises, workoutLogs, workoutPlans } from "../../db/schema";
 import { planCreateSchema, planUpdateSchema } from "../../shared/schemas";
-import type { WorkoutPlan } from "../../shared/types";
 import type { AppEnv } from "../env";
-import { dbFrom, batchAll, findInaccessibleExerciseIds } from "../lib/helpers";
+import {
+  batchAll,
+  chunkedInserts,
+  dbFrom,
+  definedFields,
+  findInaccessibleExerciseIds,
+} from "../lib/helpers";
 import { parseJson } from "../lib/parse";
-import { loadPlan } from "../lib/plans";
+import { loadPlan, loadPlans } from "../lib/plans";
 
 export const planRoutes = new Hono<AppEnv>();
 
@@ -33,15 +38,7 @@ function planExerciseRows(planId: string, items: PlanExerciseInput[]) {
 }
 
 planRoutes.get("/", async (c) => {
-  const db = dbFrom(c);
-  const userId = c.get("userId");
-  const plans = await db
-    .select()
-    .from(workoutPlans)
-    .where(eq(workoutPlans.userId, userId))
-    .orderBy(desc(workoutPlans.createdAt));
-  const full = await Promise.all(plans.map((plan) => loadPlan(db, plan.id, userId)));
-  return c.json({ plans: full.filter((plan): plan is WorkoutPlan => Boolean(plan)) });
+  return c.json({ plans: await loadPlans(dbFrom(c), c.get("userId")) });
 });
 
 planRoutes.get("/:id", async (c) => {
@@ -61,8 +58,7 @@ planRoutes.post("/", async (c) => {
   if (bad.length) return c.json({ error: "Unbekannte oder fremde Übung im Plan" }, 400);
 
   const id = crypto.randomUUID();
-  const rows = planExerciseRows(id, parsed.data.exercises ?? []);
-  const stmts: Parameters<typeof batchAll>[1] = [
+  await batchAll(db, [
     db.insert(workoutPlans).values({
       id,
       userId,
@@ -70,11 +66,8 @@ planRoutes.post("/", async (c) => {
       description: parsed.data.description ?? null,
       createdAt: Date.now(),
     }),
-  ];
-  for (let i = 0; i < rows.length; i += 10) {
-    stmts.push(db.insert(planExercises).values(rows.slice(i, i + 10)));
-  }
-  await batchAll(db, stmts);
+    ...chunkedInserts(db, planExercises, planExerciseRows(id, parsed.data.exercises ?? [])),
+  ]);
   const plan = await loadPlan(db, id, userId);
   return c.json({ plan }, 201);
 });
@@ -98,30 +91,21 @@ planRoutes.patch("/:id", async (c) => {
     if (bad.length) return c.json({ error: "Unbekannte oder fremde Übung im Plan" }, 400);
   }
 
-  const update = {
-    ...(parsed.data.title !== undefined ? { title: parsed.data.title } : {}),
-    ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
-  };
+  const update = definedFields({
+    title: parsed.data.title,
+    description: parsed.data.description,
+  });
+  const ownPlan = and(eq(workoutPlans.id, id), eq(workoutPlans.userId, userId));
 
-  if (parsed.data.exercises) {
-    const rows = planExerciseRows(id, parsed.data.exercises);
-    const stmts: Parameters<typeof batchAll>[1] = [
-      db
-        .update(workoutPlans)
-        .set(update)
-        .where(and(eq(workoutPlans.id, id), eq(workoutPlans.userId, userId))),
-      db.delete(planExercises).where(eq(planExercises.planId, id)),
-    ];
-    for (let i = 0; i < rows.length; i += 10) {
-      stmts.push(db.insert(planExercises).values(rows.slice(i, i + 10)));
-    }
-    await batchAll(db, stmts);
-  } else if (Object.keys(update).length) {
-    await db
-      .update(workoutPlans)
-      .set(update)
-      .where(and(eq(workoutPlans.id, id), eq(workoutPlans.userId, userId)));
-  }
+  await batchAll(db, [
+    ...(Object.keys(update).length ? [db.update(workoutPlans).set(update).where(ownPlan)] : []),
+    ...(parsed.data.exercises
+      ? [
+          db.delete(planExercises).where(eq(planExercises.planId, id)),
+          ...chunkedInserts(db, planExercises, planExerciseRows(id, parsed.data.exercises)),
+        ]
+      : []),
+  ]);
 
   return c.json({ plan: await loadPlan(db, id, userId) });
 });

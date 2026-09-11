@@ -14,6 +14,17 @@ import type { AppEnv } from "./env";
 
 const app = new Hono<AppEnv>();
 
+// API-Antworten sind nutzerbezogen: Browser und Zwischen-Caches dürfen sie
+// nicht heuristisch speichern. Der Übungskatalog wird zusätzlich vom Service
+// Worker vorgehalten (vite.config.ts) und darf dort revalidiert werden.
+app.use("/api/*", async (c, next) => {
+  await next();
+  c.header(
+    "Cache-Control",
+    c.req.path.startsWith("/api/exercises") ? "private, no-cache" : "no-store",
+  );
+});
+
 app.get("/api/health", (c) => c.json({ ok: true }));
 app.use("/api/*", authMiddleware);
 app.route("/api/auth", authRoutes);
@@ -29,6 +40,11 @@ app.notFound((c) => {
     return c.json({ error: "Nicht gefunden" }, 404);
   }
   return c.text("Not found", 404);
+});
+
+app.onError((error, c) => {
+  console.error(`${c.req.method} ${c.req.path}`, error);
+  return c.json({ error: "Interner Fehler. Bitte später erneut versuchen." }, 500);
 });
 
 export default {

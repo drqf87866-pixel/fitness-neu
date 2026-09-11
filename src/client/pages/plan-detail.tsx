@@ -1,15 +1,14 @@
-import { useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router";
 import { ArrowLeft, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useStartWorkout } from "@/hooks/use-start-workout";
 import { api } from "@/lib/api";
 import { muscleLabel } from "@/lib/labels";
 import { getExerciseImage } from "@/lib/exercise-images";
-import type { WorkoutPlan, WorkoutSession } from "@shared/types";
-import { toast } from "sonner";
-import { useQuery } from "@tanstack/react-query";
+import type { WorkoutPlan } from "@shared/types";
 
 export function PlanDetailPage() {
   const { planId } = useParams();
@@ -21,15 +20,7 @@ export function PlanDetailPage() {
   });
   const plan = plans.data?.plans.find((p) => p.id === planId) ?? null;
 
-  const start = useMutation({
-    mutationFn: (id: string) =>
-      api<{ session: WorkoutSession }>("/api/sessions", {
-        method: "POST",
-        body: JSON.stringify({ planId: id }),
-      }),
-    onSuccess: (data) => navigate(`/workout/${data.session.id}`),
-    onError: (error) => toast.error(error.message),
-  });
+  const start = useStartWorkout();
 
   if (plans.isLoading) {
     return (
@@ -98,7 +89,8 @@ export function PlanDetailPage() {
 
       {/* Übungen */}
       <div className="grid gap-3">
-        {plan.exercises
+        {/* Kopie sortieren: sort() auf dem Query-Cache würde ihn in-place ändern. */}
+        {[...plan.exercises]
           .sort((a, b) => a.order - b.order)
           .map((ex, index) => {
             const images = getExerciseImage(ex.exerciseId);
@@ -143,7 +135,7 @@ export function PlanDetailPage() {
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  {ex.targetSets} Satz{ex.targetSets !== 1 ? "s" : ""} ·{" "}
+                  {ex.targetSets} {ex.targetSets === 1 ? "Satz" : "Sätze"} ·{" "}
                   {ex.targetReps} Wiederholungen
                   {ex.restSeconds ? ` · ${ex.restSeconds}s Pause` : ""}
                 </p>

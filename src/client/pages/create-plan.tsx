@@ -24,7 +24,12 @@ type DraftItem = {
   primaryMuscle: string;
   targetSets: number;
   targetReps: string;
+  /** Im Editor nicht bearbeitbar, muss beim Speichern aber erhalten bleiben. */
+  restSeconds: number;
+  suggestedWeight: number | null;
 };
+
+const DEFAULT_REST_SECONDS = 90;
 
 /** Dieselbe Seite erstellt und bearbeitet Pläne – der Übungs-Picker ist ein
  *  Sheet und ließe sich in einem Dialog nicht sauber verschachteln. */
@@ -62,6 +67,8 @@ export function CreatePlanPage() {
           primaryMuscle: exercise.primaryMuscle,
           targetSets: exercise.targetSets,
           targetReps: exercise.targetReps,
+          restSeconds: exercise.restSeconds,
+          suggestedWeight: exercise.suggestedWeight,
         })),
     );
     setLoaded(true);
@@ -96,6 +103,8 @@ export function CreatePlanPage() {
       exerciseId: exercise.id,
       name: exercise.name,
       primaryMuscle: exercise.primaryMuscle,
+      // Das Startgewicht der alten Übung passt nicht zur neuen.
+      suggestedWeight: null,
     });
     setAltTarget(null);
     toast.success(`Übung durch „${exercise.name}“ ersetzt`);
@@ -123,11 +132,15 @@ export function CreatePlanPage() {
             targetSets: item.targetSets,
             targetReps: item.targetReps,
             order: index,
+            restSeconds: item.restSeconds,
+            suggestedWeight: item.suggestedWeight,
           })),
         }),
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["plans"] });
+      // Laufende/vergangene Trainings zeigen Ziel-Wdh. und Pausen aus dem Plan.
+      void queryClient.invalidateQueries({ queryKey: ["session-open"] });
       toast.success(isEdit ? "Plan gespeichert" : "Plan erstellt");
       navigate("/plans");
     },
@@ -351,6 +364,8 @@ export function CreatePlanPage() {
               primaryMuscle: exercise.primaryMuscle,
               targetSets: 3,
               targetReps: "8-12",
+              restSeconds: DEFAULT_REST_SECONDS,
+              suggestedWeight: null,
             })),
           ])
         }

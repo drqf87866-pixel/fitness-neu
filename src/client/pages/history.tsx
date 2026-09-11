@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { useConfirm } from "@/components/ui/confirm";
 import { api } from "@/lib/api";
 import { useAuthQuery } from "@/lib/auth";
+import { invalidateTrainingQueries } from "@/lib/query-client";
 import { kgToDisplay, unitLabel } from "@/lib/units";
 import { cn, formatDay, formatDuration } from "@/lib/utils";
 import type { SessionSummary } from "@shared/types";
@@ -21,7 +22,6 @@ function dayKey(date: Date) {
 
 export function HistoryPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const confirm = useConfirm();
   const me = useAuthQuery();
   const unit = me.data?.user.unit ?? "kg";
@@ -29,26 +29,29 @@ export function HistoryPage() {
   const [cursor, setCursor] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
+  // Pro Monat laden: die ungefilterte Liste endet nach den letzten 90
+  // Trainings, ältere Monate wirkten dann leer.
+  const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1).getTime();
+  const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1).getTime();
   const history = useQuery({
-    queryKey: ["sessions"],
-    queryFn: () => api<{ sessions: SessionSummary[] }>("/api/sessions"),
+    queryKey: ["sessions", monthStart],
+    queryFn: () =>
+      api<{ sessions: SessionSummary[] }>(`/api/sessions?from=${monthStart}&to=${monthEnd}`),
+    placeholderData: keepPreviousData,
   });
 
   const remove = useMutation({
     mutationFn: (id: string) => api(`/api/sessions/${id}`, { method: "DELETE" }),
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["sessions"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] }),
-        queryClient.invalidateQueries({ queryKey: ["prs"] }),
-        queryClient.invalidateQueries({ queryKey: ["volume"] }),
-      ]);
+      await invalidateTrainingQueries();
       toast.success("Training gelöscht");
     },
     onError: (error) => toast.error(error.message),
   });
 
   const sessions = useMemo(() => history.data?.sessions ?? [], [history.data]);
+  /** Beim Monatswechsel stehen bis zur Antwort noch die Daten des Vormonats im Cache. */
+  const loadingMonth = history.isLoading || history.isPlaceholderData;
 
   const daysWithWorkouts = useMemo(
     () => new Set(sessions.map((session) => dayKey(new Date(session.startedAt)))),
@@ -243,13 +246,13 @@ export function HistoryPage() {
         ) : (
           <Card compact className="grid gap-3 py-8 text-center">
             <p className="text-sm text-muted-foreground">
-              {history.isLoading
+              {loadingMonth
                 ? "Lade…"
                 : selectedDay !== null
                   ? "An diesem Tag kein Training."
                   : "Keine Trainings in diesem Monat."}
             </p>
-            {!history.isLoading && selectedDay === null ? (
+            {!loadingMonth && selectedDay === null ? (
               <Button variant="secondary" onClick={() => navigate("/plans")}>
                 Plan auswählen
               </Button>

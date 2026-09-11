@@ -3,8 +3,9 @@ import { exercises, users } from "../../db/schema";
 import type { Exercise, UserProfile } from "../../shared/types";
 import type { AppEnv } from "../env";
 import type { Context } from "hono";
-import { eq, inArray } from "drizzle-orm";
+import { eq, getTableColumns, inArray } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
+import type { SQLiteInsertValue, SQLiteTable } from "drizzle-orm/sqlite-core";
 
 export function dbFrom(c: Context<AppEnv>) {
   return createDb(c.env.DB);
@@ -75,6 +76,47 @@ export function estimated1rm(weight: number, reps: number): number {
 export async function batchAll(db: Database, stmts: BatchItem<"sqlite">[]): Promise<void> {
   if (!stmts.length) return;
   await db.batch(stmts as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
+}
+
+/** D1 bindet höchstens 100 Parameter pro Statement. */
+const D1_MAX_PARAMS = 100;
+
+/**
+ * Mehrzeiliger Insert, aufgeteilt in Statements unterhalb des D1-Parameterlimits
+ * (Zeilen pro Statement = 100 / Spaltenanzahl). Für {@link batchAll}.
+ */
+export function chunkedInserts<T extends SQLiteTable>(
+  db: Database,
+  table: T,
+  rows: SQLiteInsertValue<T>[],
+): BatchItem<"sqlite">[] {
+  const columns = Object.keys(getTableColumns(table)).length;
+  const size = Math.max(1, Math.floor(D1_MAX_PARAMS / columns));
+  const stmts: BatchItem<"sqlite">[] = [];
+  for (let i = 0; i < rows.length; i += size) {
+    stmts.push(db.insert(table).values(rows.slice(i, i + size)));
+  }
+  return stmts;
+}
+
+/** SQLite-Unique-Verletzung – auch wenn Drizzle den D1-Fehler in `cause` verpackt. */
+export function isUniqueViolation(error: unknown): boolean {
+  for (let current: unknown = error, depth = 0; current && depth < 4; depth += 1) {
+    if (current instanceof Error) {
+      if (current.message.includes("UNIQUE constraint failed")) return true;
+      current = current.cause;
+    } else {
+      return false;
+    }
+  }
+  return false;
+}
+
+/** Update-Objekt ohne `undefined`-Felder – leer bedeutet: nichts zu tun. */
+export function definedFields<T extends Record<string, unknown>>(input: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined),
+  ) as Partial<T>;
 }
 
 /**

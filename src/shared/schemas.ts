@@ -1,5 +1,67 @@
 import { z } from "zod";
 
+/** Feldnamen für Fehlermeldungen – die API liefert die erste Meldung direkt an den Toast. */
+const FIELD_LABELS: Record<string, string> = {
+  email: "E-Mail",
+  name: "Name",
+  password: "Passwort",
+  currentPassword: "Aktuelles Passwort",
+  newPassword: "Neues Passwort",
+  targetGoal: "Ziel",
+  weightKg: "Körpergewicht",
+  experienceLevel: "Erfahrung",
+  calorieTarget: "Kalorienziel",
+  unit: "Einheit",
+  title: "Name",
+  description: "Beschreibung",
+  prompt: "Beschreibung",
+  primaryMuscle: "Muskelgruppe",
+  secondaryMuscles: "Weitere Muskeln",
+  equipment: "Equipment",
+  category: "Kategorie",
+  targetSets: "Sätze",
+  targetReps: "Wiederholungen",
+  weight: "Gewicht",
+  reps: "Wiederholungen",
+  exercises: "Übungen",
+  sets: "Sätze",
+};
+
+z.setErrorMap((issue, ctx) => {
+  const field = [...issue.path].reverse().find((part) => typeof part === "string");
+  const label = typeof field === "string" ? FIELD_LABELS[field] : undefined;
+  const prefix = label ? `${label}: ` : "";
+  switch (issue.code) {
+    case z.ZodIssueCode.invalid_type:
+      if (issue.received === "undefined") return { message: `${prefix}Angabe fehlt` };
+      if (issue.expected === "integer") return { message: `${prefix}Ganze Zahl erwartet` };
+      return { message: `${prefix}Ungültiger Wert` };
+    case z.ZodIssueCode.too_small:
+      if (issue.type === "string") {
+        return {
+          message:
+            Number(issue.minimum) <= 1
+              ? `${prefix}darf nicht leer sein`
+              : `${prefix}mindestens ${issue.minimum} Zeichen`,
+        };
+      }
+      if (issue.type === "array") return { message: `${prefix}mindestens ${issue.minimum} Einträge` };
+      return { message: `${prefix}mindestens ${issue.minimum}` };
+    case z.ZodIssueCode.too_big:
+      if (issue.type === "string") return { message: `${prefix}höchstens ${issue.maximum} Zeichen` };
+      if (issue.type === "array") return { message: `${prefix}höchstens ${issue.maximum} Einträge` };
+      return { message: `${prefix}höchstens ${issue.maximum}` };
+    case z.ZodIssueCode.invalid_string:
+      return { message: issue.validation === "email" ? "Ungültige E-Mail-Adresse" : `${prefix}Ungültiges Format` };
+    case z.ZodIssueCode.invalid_enum_value:
+      return { message: `${prefix}Ungültige Auswahl` };
+    case z.ZodIssueCode.not_multiple_of:
+      return { message: `${prefix}Ganze Zahl erwartet` };
+    default:
+      return { message: ctx.defaultError };
+  }
+});
+
 export const experienceLevelSchema = z.enum(["beginner", "intermediate", "advanced"]);
 export const unitSchema = z.enum(["kg", "lbs"]);
 export const categorySchema = z.enum(["push", "pull", "legs", "core", "cardio", "other"]);
@@ -99,10 +161,27 @@ export const startSessionSchema = z.object({
   id: z.string().min(1).optional(),
 });
 
+/** Abschließen ist endgültig: `completedAt` lässt sich setzen, aber nicht zurücknehmen. */
 export const patchSessionSchema = z.object({
-  completedAt: z.number().int().nullable().optional(),
+  completedAt: z.number().int().positive().optional(),
   notes: z.string().max(2000).nullable().optional(),
 });
+
+/** Zeitraum für Listen und Auswertungen (ms seit Epoch), höchstens gut ein Jahr. */
+export const MAX_RANGE_MS = 400 * 24 * 60 * 60 * 1000;
+export const rangeQuerySchema = z
+  .object({
+    from: z.coerce.number().int().nonnegative().optional(),
+    to: z.coerce.number().int().nonnegative().optional(),
+  })
+  .refine((range) => range.from === undefined || range.to === undefined || range.from <= range.to, {
+    message: "Ungültiger Zeitraum",
+  })
+  .refine(
+    (range) =>
+      range.from === undefined || range.to === undefined || range.to - range.from <= MAX_RANGE_MS,
+    { message: "Zeitraum zu groß" },
+  );
 
 export const setLogInputSchema = z.object({
   id: z.string().min(1).optional(),
@@ -114,5 +193,14 @@ export const setLogInputSchema = z.object({
 });
 
 export const upsertSetsSchema = z.object({
-  sets: z.array(setLogInputSchema).max(200),
+  sets: z
+    .array(setLogInputSchema)
+    .max(200)
+    .refine(
+      (sets) => {
+        const ids = sets.flatMap((set) => (set.id ? [set.id] : []));
+        return new Set(ids).size === ids.length;
+      },
+      { message: "Doppelte Satz-IDs" },
+    ),
 });

@@ -43,6 +43,17 @@ export async function hashPassword(password: string): Promise<string> {
   return `pbkdf2$${ITERATIONS}$${bytesToB64(salt)}$${bytesToB64(hash)}`;
 }
 
+const DUMMY_SALT = new Uint8Array(16);
+
+/**
+ * Gleicher Rechenaufwand wie {@link verifyPassword}, aber ohne Treffer: für
+ * unbekannte E-Mails, damit die Antwortzeit nicht verrät, ob ein Konto existiert.
+ */
+export async function burnPasswordCheck(password: string): Promise<false> {
+  await pbkdf2(password, DUMMY_SALT, ITERATIONS);
+  return false;
+}
+
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const [algo, iterRaw, saltB64, hashB64] = stored.split("$");
   if (algo !== "pbkdf2" || !iterRaw || !saltB64 || !hashB64) return false;

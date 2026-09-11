@@ -1,4 +1,5 @@
-import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const sessions = sqliteTable(
   "sessions",
@@ -12,11 +13,15 @@ export const sessions = sqliteTable(
   (table) => [index("sessions_expires_idx").on(table.expiresAt)],
 );
 
-export const rateLimits = sqliteTable("rate_limits", {
-  key: text("key").primaryKey(),
-  count: integer("count").notNull().default(0),
-  expiresAt: integer("expires_at").notNull(),
-});
+export const rateLimits = sqliteTable(
+  "rate_limits",
+  {
+    key: text("key").primaryKey(),
+    count: integer("count").notNull().default(0),
+    expiresAt: integer("expires_at").notNull(),
+  },
+  (table) => [index("rate_limits_expires_idx").on(table.expiresAt)],
+);
 
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
@@ -78,7 +83,10 @@ export const planExercises = sqliteTable(
     restSeconds: integer("rest_seconds").notNull().default(90),
     suggestedWeight: real("suggested_weight"),
   },
-  (table) => [index("plan_exercises_plan_idx").on(table.planId)],
+  (table) => [
+    index("plan_exercises_plan_idx").on(table.planId),
+    index("plan_exercises_exercise_idx").on(table.exerciseId),
+  ],
 );
 
 export const workoutLogs = sqliteTable(
@@ -95,6 +103,11 @@ export const workoutLogs = sqliteTable(
   },
   (table) => [
     index("workout_logs_user_started_idx").on(table.userId, table.startedAt),
+    index("workout_logs_plan_idx").on(table.planId),
+    // Höchstens ein offenes Training pro Nutzer – auch bei parallelen Starts.
+    uniqueIndex("workout_logs_one_open_idx")
+      .on(table.userId)
+      .where(sql`completed_at IS NULL`),
   ],
 );
 

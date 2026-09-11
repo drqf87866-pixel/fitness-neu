@@ -163,6 +163,21 @@ export async function markOrphaned(id: string, status: number | null, message: s
   await tx.done;
 }
 
+/** Nutzer möchte eine abgelehnte Session erneut senden. */
+export async function clearOrphaned(id: string) {
+  const db = await getDb();
+  const tx = db.transaction("sessions", "readwrite");
+  const existing = normalize(await tx.store.get(id));
+  if (existing) await tx.store.put({ ...existing, orphaned: null }, id);
+  await tx.done;
+}
+
+/** Noch nicht (vollständig) beim Server angekommene Sessions. */
+export async function loadUnsyncedSessions(): Promise<LocalSessionEntry[]> {
+  const all = await loadLocalSessions();
+  return all.filter((entry) => entry.dirty || entry.pendingComplete || entry.orphaned);
+}
+
 /** Lokale Kopie entfernen – optional nur, wenn sie noch auf `revision` steht. */
 export async function clearLocalSession(id: string, revision?: number) {
   const db = await getDb();
